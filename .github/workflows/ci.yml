@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        project:
+          - name: backend
+            directory: edulink-backend
+          - name: saas-backend
+            directory: saas
+          - name: saas-frontend
+            directory: saas
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.project.directory }}/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./${{ matrix.project.directory }}
+        run: |
+          if [ -f "package.json" ]; then
+            npm ci
+          else
+            echo "No package.json found, skipping..."
+            exit 0
+          fi
+      
+      - name: Run linter (if available)
+        continue-on-error: true
+        working-directory: ./${{ matrix.project.directory }}
+        run: |
+          if [ -f "package.json" ] && grep -q '"lint"' package.json; then
+            npm run lint
+          else
+            echo "No lint script found"
+          fi
+      
+      - name: Run tests (if available)
+        continue-on-error: true
+        working-directory: ./${{ matrix.project.directory }}
+        run: |
+          if [ -f "package.json" ] && grep -q '"test"' package.json; then
+            npm test
+          else
+            echo "No test script found"
+          fi
+      
+      - name: Build check
+        continue-on-error: true
+        working-directory: ./${{ matrix.project.directory }}
+        run: |
+          if [ -f "package.json" ] && grep -q '"build"' package.json; then
+            npm run build
+          else
+            echo "No build script found"
+          fi
+

@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Node.js dependencies
+  - package-ecosystem: "npm"
+    directory: "/edulink-backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    
+  - package-ecosystem: "npm"
+    directory: "/saas"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    
+  - package-ecosystem: "npm"
+    directory: "/parentsapp"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+

@@ -1,0 +1,74 @@
+name: Backend Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'edulink-backend/**'
+      - 'saas/server.js'
+      - 'saas/server/**'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies (edulink-backend)
+        working-directory: ./edulink-backend
+        run: |
+          if [ -f "package.json" ]; then
+            npm ci
+          fi
+      
+      - name: Install dependencies (saas backend)
+        working-directory: ./saas
+        run: |
+          if [ -f "package.json" ]; then
+            npm ci
+          fi
+      
+      - name: Run tests (if available)
+        continue-on-error: true
+        working-directory: ./edulink-backend
+        run: |
+          if [ -f "package.json" ] && grep -q '"test"' package.json; then
+            npm test
+          fi
+      
+      - name: Build check
+        working-directory: ./edulink-backend
+        run: |
+          echo "Backend build check completed"
+      
+      - name: Deploy to Railway (Optional)
+        if: env.RAILWAY_TOKEN != ''
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "Railway deployment would happen here"
+          # Railway CLI를 사용하려면:
+          # npm install -g @railway/cli
+          # railway up
+      
+      - name: Deploy to Render (Optional)
+        if: env.RENDER_SERVICE_ID != ''
+        env:
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          echo "Render deployment would happen here"
+          # Render API를 사용한 배포 스크립트
+

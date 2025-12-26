@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: edulink-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
+    # 참고: SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY는 Render 대시보드에서 직접 설정해야 합니다
+    # 보안상 이유로 render.yaml에는 포함하지 않습니다

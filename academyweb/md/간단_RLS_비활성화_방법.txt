@@ -1,0 +1,34 @@
+===========================================
+RLS 비활성화 - 간단한 방법
+===========================================
+
+1. Supabase 웹사이트 접속
+   → https://app.supabase.com
+
+2. 프로젝트 선택
+
+3. 왼쪽 메뉴에서 "SQL Editor" 클릭
+
+4. "New query" 버튼 클릭
+
+5. 아래 SQL 코드를 복사해서 붙여넣기:
+
+ALTER TABLE academies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE subjects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE classrooms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE teachers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE students DISABLE ROW LEVEL SECURITY;
+ALTER TABLE classes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE enrollments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE schedules DISABLE ROW LEVEL SECURITY;
+ALTER TABLE requests DISABLE ROW LEVEL SECURITY;
+
+6. "RUN" 버튼 클릭 (또는 Ctrl+Enter)
+
+7. 백엔드 서버 재시작
+
+8. 회원가입 다시 시도
+
+끝!
+

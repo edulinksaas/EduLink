@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd saas/saas && npm run build",
+  "outputDirectory": "saas/saas/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+

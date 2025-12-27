@@ -219,49 +219,46 @@ export const register = async (req, res, next) => {
     const user = new User(userData);
     await user.save();
     
-    // 기존 SMTP 서비스를 사용하여 이메일 발송 (Supabase Auth와 관계없이 항상 발송)
-    console.log('\n📧 이메일 발송 시작...');
+    // 이메일 발송을 비동기로 처리 (응답을 기다리지 않음)
+    // 백그라운드에서 이메일 발송을 시도하되, 실패해도 회원가입은 성공으로 처리
+    console.log('\n📧 이메일 발송을 백그라운드에서 시작...');
     console.log(`   수신자: ${sanitizedEmail}`);
     console.log(`   학원명: ${academy_name}`);
     
-    try {
-      const emailSent = await sendVerificationEmail(
-        sanitizedEmail,
-        verificationToken,
-        academy_name,
-        normalizedAcademyCode
-      );
-      
+    // 비동기로 이메일 발송 (await 없이 Promise로 처리)
+    sendVerificationEmail(
+      sanitizedEmail,
+      verificationToken,
+      academy_name,
+      normalizedAcademyCode
+    ).then((emailSent) => {
       if (emailSent) {
-        console.log('✅ 이메일 발송 함수 호출 완료 (성공 여부는 위 로그 확인)');
+        console.log('✅ 이메일 발송 완료');
       } else {
-        console.warn('⚠️ 이메일 발송 함수가 false를 반환했습니다.');
-        if (process.env.NODE_ENV === 'production') {
-          console.warn('⚠️ 이메일 발송 실패했지만 사용자는 생성되었습니다.');
-        }
+        console.warn('⚠️ 이메일 발송 실패했지만 사용자는 생성되었습니다.');
       }
-      
-      // 개발 환경에서 인증 링크를 콘솔에 명확히 출력
-      if (process.env.NODE_ENV !== 'production') {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}`;
-        console.log('\n' + '='.repeat(70));
-        console.log('📧 이메일 인증 링크 (기존 SMTP 서비스 사용)');
-        console.log('='.repeat(70));
-        console.log(`수신자: ${sanitizedEmail}`);
-        console.log(`학원명: ${academy_name}`);
-        console.log(`인증 링크: ${verificationLink}`);
-        console.log(`토큰: ${verificationToken}`);
-        if (supabaseUserId) {
-          console.log(`Supabase Auth 사용자 ID: ${supabaseUserId}`);
-        }
-        console.log('='.repeat(70) + '\n');
-      }
-    } catch (emailError) {
-      console.error('\n❌ 이메일 발송 중 예외 발생:');
+    }).catch((emailError) => {
+      console.error('\n❌ 이메일 발송 중 예외 발생 (백그라운드):');
       console.error('   에러:', emailError.message);
       console.error('   스택:', emailError.stack);
       // 이메일 발송 실패해도 회원가입은 성공으로 처리
+    });
+    
+    // 개발 환경에서 인증 링크를 콘솔에 명확히 출력
+    if (process.env.NODE_ENV !== 'production') {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}`;
+      console.log('\n' + '='.repeat(70));
+      console.log('📧 이메일 인증 링크 (기존 SMTP 서비스 사용)');
+      console.log('='.repeat(70));
+      console.log(`수신자: ${sanitizedEmail}`);
+      console.log(`학원명: ${academy_name}`);
+      console.log(`인증 링크: ${verificationLink}`);
+      console.log(`토큰: ${verificationToken}`);
+      if (supabaseUserId) {
+        console.log(`Supabase Auth 사용자 ID: ${supabaseUserId}`);
+      }
+      console.log('='.repeat(70) + '\n');
     }
 
     // JWT 토큰 생성

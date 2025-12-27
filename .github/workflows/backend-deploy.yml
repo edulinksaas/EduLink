@@ -6,9 +6,7 @@ on:
       - main
       - master
     paths:
-      - 'edulink-backend/**'
-      - 'saas/server.js'
-      - 'saas/server/**'
+      - 'backend/**'
       - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
@@ -25,16 +23,10 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
       
-      - name: Install dependencies (edulink-backend)
-        working-directory: ./edulink-backend
-        run: |
-          if [ -f "package.json" ]; then
-            npm ci
-          fi
-      
-      - name: Install dependencies (saas backend)
-        working-directory: ./saas
+      - name: Install dependencies
+        working-directory: ./backend
         run: |
           if [ -f "package.json" ]; then
             npm ci
@@ -42,14 +34,14 @@ jobs:
       
       - name: Run tests (if available)
         continue-on-error: true
-        working-directory: ./edulink-backend
+        working-directory: ./backend
         run: |
           if [ -f "package.json" ] && grep -q '"test"' package.json; then
             npm test
           fi
       
       - name: Build check
-        working-directory: ./edulink-backend
+        working-directory: ./backend
         run: |
           echo "Backend build check completed"
       
@@ -71,4 +63,3 @@ jobs:
         run: |
           echo "Render deployment would happen here"
           # Render API를 사용한 배포 스크립트
-

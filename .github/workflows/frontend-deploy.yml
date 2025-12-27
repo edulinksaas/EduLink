@@ -6,9 +6,9 @@ on:
       - main
       - master
     paths:
-      - 'saas/saas/**'
-      - 'saas/package.json'
-      - 'saas/vite.config.js'
+      - 'aweb/web/**'
+      - 'aweb/web/package.json'
+      - 'aweb/web/vite.config.js'
       - '.github/workflows/frontend-deploy.yml'
   workflow_dispatch:
 
@@ -25,22 +25,22 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: saas/package-lock.json
+          cache-dependency-path: aweb/web/package-lock.json
       
       - name: Install dependencies
-        working-directory: ./saas
+        working-directory: ./aweb/web
         run: npm ci
       
       - name: Build frontend
-        working-directory: ./saas
+        working-directory: ./aweb/web
         run: npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
       
       - name: Build artifacts
         run: |
           mkdir -p dist
-          cp -r saas/dist/* dist/ || true
+          cp -r aweb/web/dist/* dist/ || true
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -57,5 +57,4 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
-          working-directory: ./saas
-
+          working-directory: ./aweb/web

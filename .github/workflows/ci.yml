@@ -20,11 +20,9 @@ jobs:
       matrix:
         project:
           - name: backend
-            directory: edulink-backend
-          - name: saas-backend
-            directory: saas
-          - name: saas-frontend
-            directory: saas
+            directory: backend
+          - name: frontend
+            directory: aweb/web
     
     steps:
       - name: Checkout code
@@ -76,4 +74,3 @@ jobs:
           else
             echo "No build script found"
           fi
-

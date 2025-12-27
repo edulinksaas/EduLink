@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd saas/saas && npm run build",
-  "outputDirectory": "saas/saas/dist",
+  "buildCommand": "cd aweb/web && npm run build",
+  "outputDirectory": "aweb/web/dist",
   "framework": "vite",
   "rewrites": [
     {
@@ -9,4 +9,3 @@
     }
   ]
 }
-

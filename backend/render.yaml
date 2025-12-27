@@ -2,7 +2,7 @@ services:
   - type: web
     name: edulink-backend
     env: node
-    rootDir: server
+    rootDir: backend
     buildCommand: npm install
     startCommand: npm start
     envVars:

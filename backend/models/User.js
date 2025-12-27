@@ -84,6 +84,38 @@ export class User {
     }
   }
 
+  static async findByEmail(email) {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return null;
+    }
+
+    if (!email || !email.trim()) {
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('이메일로 사용자 조회 에러:', error);
+        return null;
+      }
+
+      return data ? new User(data) : null;
+    } catch (error) {
+      console.error('이메일로 사용자 조회 실패:', error);
+      return null;
+    }
+  }
+
   async verifyPassword(password) {
     if (!this.password_hash) {
       console.warn('⚠️ 비밀번호 해시가 없습니다.');

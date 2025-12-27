@@ -12,6 +12,10 @@ export class User {
     this.email = data.email || null;
     this.phone = data.phone || null;
     this.role = data.role || 'admin';
+    this.email_verified = data.email_verified || false;
+    this.verification_token = data.verification_token || null;
+    this.verification_token_expires_at = data.verification_token_expires_at || null;
+    this.supabase_user_id = data.supabase_user_id || null;
     this.createdAt = data.created_at || data.createdAt || new Date();
     this.updatedAt = data.updated_at || data.updatedAt || new Date();
   }

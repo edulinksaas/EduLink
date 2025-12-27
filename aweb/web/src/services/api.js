@@ -9,7 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10초 타임아웃
+  timeout: 30000, // 30초 타임아웃 (이메일 발송 시간 고려)
 });
 
 // Request interceptor - 토큰 추가 및 로깅

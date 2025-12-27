@@ -57,13 +57,18 @@ const createTransporter = () => {
 /**
  * 이메일 인증 링크 발송
  * @param {string} to - 수신자 이메일
- * @param {string} verificationToken - 인증 토큰
+ * @param {string} verificationToken - 인증 토큰 또는 Supabase 인증 링크
  * @param {string} academyName - 학원 이름
+ * @param {string} academyCode - 학원 코드
+ * @param {boolean} isSupabaseLink - Supabase 인증 링크인지 여부
  * @returns {Promise<boolean>} 발송 성공 여부
  */
-export const sendVerificationEmail = async (to, verificationToken, academyName, academyCode) => {
+export const sendVerificationEmail = async (to, verificationToken, academyName, academyCode, isSupabaseLink = false) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-  const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}`;
+  // Supabase 링크인 경우 그대로 사용, 커스텀 토큰인 경우 링크 생성
+  const verificationLink = isSupabaseLink 
+    ? verificationToken 
+    : `${frontendUrl}/verify-email?token=${verificationToken}`;
 
   const mailOptions = {
     from: `"${process.env.SMTP_FROM_NAME || '학원 관리 시스템'}" <${process.env.SMTP_USER}>`,

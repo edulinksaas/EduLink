@@ -152,19 +152,16 @@ export const register = async (req, res, next) => {
     }
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Supabase Auth로 회원가입 (이메일 인증 자동 발송)
+    // Supabase Auth로 회원가입 및 인증 링크 생성
     let supabaseUserId = null;
     let emailVerified = false;
+    let supabaseConfirmationUrl = null;
     
     if (supabase) {
       try {
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         
-        // Supabase Auth Admin API로 사용자 생성 및 이메일 발송
-        // 참고: createUser는 이메일을 자동 발송하지 않으므로,
-        // 사용자 생성 후 이메일 인증 링크를 생성하고 수동으로 발송하거나
-        // 프론트엔드에서 signUp을 먼저 호출하는 것이 좋습니다.
-        
+        // Supabase Auth Admin API로 사용자 생성
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: sanitizedEmail,
           password: password,
@@ -184,7 +181,26 @@ export const register = async (req, res, next) => {
         } else if (authData.user) {
           supabaseUserId = authData.user.id;
           emailVerified = authData.user.email_confirmed_at !== null;
-          console.log('✅ Supabase Auth 사용자 생성 성공 (이메일 발송은 기존 SMTP 서비스 사용)');
+          
+          // Supabase 인증 링크 생성 (이메일 템플릿의 {{ .ConfirmationURL }} 형식)
+          try {
+            const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+              type: 'signup',
+              email: sanitizedEmail,
+              options: {
+                redirectTo: `${frontendUrl}/verify-email?type=supabase`,
+              }
+            });
+
+            if (!linkError && linkData?.properties?.action_link) {
+              supabaseConfirmationUrl = linkData.properties.action_link;
+              console.log('✅ Supabase 인증 링크 생성 성공');
+            } else {
+              console.warn('⚠️ Supabase 인증 링크 생성 실패:', linkError?.message);
+            }
+          } catch (linkGenError) {
+            console.error('Supabase 인증 링크 생성 오류:', linkGenError);
+          }
         }
       } catch (supabaseError) {
         console.error('Supabase Auth 오류:', supabaseError);

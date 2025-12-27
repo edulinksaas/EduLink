@@ -17,15 +17,16 @@ const getClientIp = (req) => {
 };
 
 // 일반 API 요청 제한
-// 개발 환경: 제한 완화 (15분에 1000개), 프로덕션: 기존 제한 유지 (15분에 100개)
+// 개발 환경: 제한 완화 (15분에 1000개), 프로덕션: 완화 (15분에 500개)
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15분
-  max: isDevelopment ? 1000 : 100, // 개발: 1000개, 프로덕션: 100개
+  max: isDevelopment ? 1000 : 500, // 개발: 1000개, 프로덕션: 500개 (100개에서 증가)
   message: {
     error: '너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.'
   },
   standardHeaders: true, // `RateLimit-*` 헤더 반환
   legacyHeaders: false, // `X-RateLimit-*` 헤더 비활성화
+  skipSuccessfulRequests: false, // 성공한 요청도 카운트 (보안을 위해)
   // express-rate-limit v8은 기본적으로 IP를 사용하므로 keyGenerator 불필요
 });
 

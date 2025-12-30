@@ -23,14 +23,20 @@ export const getStudents = async (req, res, next) => {
 export const getStudentById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    console.log('📥 GET /api/students/:id 요청');
+    console.log('   학생 ID:', id);
+    
     const student = await Student.findById(id);
     
     if (!student) {
+      console.log('❌ 학생을 찾을 수 없습니다:', id);
       return res.status(404).json({ error: 'Student not found' });
     }
     
+    console.log('✅ 학생 조회 성공:', student.name, '(ID:', student.id, ')');
     res.json({ student });
   } catch (error) {
+    console.error('❌ 학생 조회 실패:', error);
     next(error);
   }
 };

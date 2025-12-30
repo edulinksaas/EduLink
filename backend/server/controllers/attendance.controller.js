@@ -64,4 +64,46 @@ export const createAttendance = async (req, res, next) => {
   }
 };
 
+// PUT /api/attendance/:id
+export const updateAttendance = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, note } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'status is required' });
+    }
+
+    const record = await AttendanceRecord.findById(id);
+    if (!record) {
+      return res.status(404).json({ error: 'Attendance record not found' });
+    }
+
+    record.status = status;
+    record.note = note || '';
+    await record.save();
+
+    res.json({ record });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/attendance/:id
+export const deleteAttendance = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const record = await AttendanceRecord.findById(id);
+    if (!record) {
+      return res.status(404).json({ error: 'Attendance record not found' });
+    }
+
+    await record.delete();
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
+
 

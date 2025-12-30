@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // .env 파일을 프로젝트 루트에서 찾도록 설정
-dotenv.config({ path: join(__dirname, '..', '.env') });
+dotenv.config({ path: join(__dirname, '..', '..', '.env') });
 
 const supabaseUrl = process.env.SUPABASE_URL;
 // Service Role Key를 우선 사용 (RLS 우회), 없으면 Anon Key 사용

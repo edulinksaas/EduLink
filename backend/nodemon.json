@@ -1,0 +1,23 @@
+{
+  "watch": [
+    "server.js",
+    "controllers",
+    "models",
+    "routes",
+    "config",
+    "middleware",
+    "utils"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "node_modules",
+    "saas",
+    "md",
+    "SQLfile",
+    "*.md",
+    "*.sql"
+  ],
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

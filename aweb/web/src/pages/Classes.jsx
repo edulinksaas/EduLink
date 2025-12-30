@@ -7,11 +7,13 @@ import { teacherService } from '../services/teacherService';
 import { timetableSettingsService } from '../services/timetableSettingsService';
 import { studentService } from '../services/studentService';
 import { tuitionFeeService } from '../services/tuitionFeeService';
+import { attendanceService } from '../services/attendanceService';
 import { checkAndDeleteEmptyClass } from '../utils/classAutoDelete';
 import { useAcademy } from '../contexts/AcademyContext';
 import Modal from '../components/Modal';
 import Form from '../components/Form';
 import ClassFormModal from '../components/ClassFormModal';
+import RegisterModal from '../components/RegisterModal';
 import './Classes.css';
 
 const Classes = () => {
@@ -23,6 +25,12 @@ const Classes = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [stats, setStats] = useState({
+    todayStatus: 0,
+    totalStudents: 0,
+    totalTeachers: 0,
+    totalClasses: 0,
+  });
   // 오늘 요일 자동 감지
   const getTodayDay = () => {
     const today = new Date();
@@ -37,6 +45,7 @@ const Classes = () => {
   const [autoReturnTimer, setAutoReturnTimer] = useState(null);
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
   const [selectedClassroom, setSelectedClassroom] = useState(null);
@@ -135,25 +144,30 @@ const Classes = () => {
     setAvailableTimeSlots(slots); // 시간표와 모달에서 사용할 시간대 동일하게 설정
   };
 
-  // 시간표 설정 로드 및 시간대 생성 (요일별 시작/종료 시간 + 시간 간격 모두 반영)
+  // 시간표 설정 로드 (academyId 변경 시에만)
   useEffect(() => {
     const loadTimetableSettings = async () => {
+      if (!academyId) return;
+      
       try {
         let normalizedSettings = null;
 
         // 1) 우선 DB의 timetable_settings에서 설정 읽기
-        if (academyId) {
-          try {
-            const response = await timetableSettingsService.get(academyId);
-            const dbSettings = response?.settings;
-            if (dbSettings) {
-              normalizedSettings = {
-                timeInterval: dbSettings.time_interval || dbSettings.timeInterval || '1시간',
-                dayTimeSettings: dbSettings.day_time_settings || dbSettings.dayTimeSettings || {},
-                operatingDays: dbSettings.operating_days || dbSettings.operatingDays || [],
-              };
-            }
-          } catch (dbError) {
+        try {
+          const response = await timetableSettingsService.get(academyId);
+          const dbSettings = response?.settings;
+          if (dbSettings) {
+            normalizedSettings = {
+              timeInterval: dbSettings.time_interval || dbSettings.timeInterval || '1시간',
+              dayTimeSettings: dbSettings.day_time_settings || dbSettings.dayTimeSettings || {},
+              operatingDays: dbSettings.operating_days || dbSettings.operatingDays || [],
+            };
+          }
+        } catch (dbError) {
+          // 429 에러 등 rate limit 에러는 재시도하지 않음
+          if (dbError?.response?.status === 429) {
+            console.warn('⚠️ API 요청 제한 초과, localStorage로 폴백');
+          } else {
             console.warn('⚠️ DB 시간표 설정 로드 실패, localStorage로 폴백:', dbError);
           }
         }
@@ -182,26 +196,6 @@ const Classes = () => {
 
         // 상태에 저장 (calculateEndTime 등에서 재사용)
         setTimetableSettings(normalizedSettings);
-
-        const intervalLabel = normalizedSettings.timeInterval || '1시간';
-
-        // 선택된 요일의 시간 설정 사용 (없으면 기본 08:00~20:00)
-        const daySettings = normalizedSettings.dayTimeSettings?.[selectedDay] || {
-          startTime: '오전 08:00',
-          endTime: '오후 08:00',
-        };
-
-        // startTime과 endTime 필드명 확인 (startTime/start_time 모두 지원)
-        const startTime = daySettings.startTime || daySettings.start_time || '오전 08:00';
-        const endTime = daySettings.endTime || daySettings.end_time || '오후 08:00';
-
-        const slots = generateTimeSlotsFromSettings(
-          startTime,
-          endTime,
-          intervalLabel
-        );
-        setTimeSlots(slots);
-        setAvailableTimeSlots(slots);
       } catch (error) {
         console.error('시간표 설정 로드 실패:', error);
         const slots = generateTimeSlotsFromSettings('오전 08:00', '오후 08:00', '1시간');
@@ -211,7 +205,32 @@ const Classes = () => {
     };
 
     loadTimetableSettings();
-  }, [academyId, selectedDay]); // 학원/요일이 변경될 때마다 시간대 재생성
+  }, [academyId]); // academyId 변경 시에만 호출
+
+  // 선택된 요일에 따라 시간대 업데이트 (로컬 상태만 변경, API 호출 없음)
+  useEffect(() => {
+    if (!timetableSettings) return;
+
+    const intervalLabel = timetableSettings.timeInterval || '1시간';
+
+    // 선택된 요일의 시간 설정 사용 (없으면 기본 08:00~20:00)
+    const daySettings = timetableSettings.dayTimeSettings?.[selectedDay] || {
+      startTime: '오전 08:00',
+      endTime: '오후 08:00',
+    };
+
+    // startTime과 endTime 필드명 확인 (startTime/start_time 모두 지원)
+    const startTime = daySettings.startTime || daySettings.start_time || '오전 08:00';
+    const endTime = daySettings.endTime || daySettings.end_time || '오후 08:00';
+
+    const slots = generateTimeSlotsFromSettings(
+      startTime,
+      endTime,
+      intervalLabel
+    );
+    setTimeSlots(slots);
+    setAvailableTimeSlots(slots);
+  }, [timetableSettings, selectedDay]); // timetableSettings와 selectedDay 변경 시에만 로컬 상태 업데이트
 
   // 다른 요일 선택 시 10분 후 오늘 요일로 자동 복귀 타이머
   useEffect(() => {
@@ -355,6 +374,16 @@ const Classes = () => {
       loadTuitionFees();
     }
   }, [academyId, academyLoading]);
+
+  // 통계 업데이트
+  useEffect(() => {
+    setStats({
+      todayStatus: 0,
+      totalStudents: students.length,
+      totalTeachers: teachers.length,
+      totalClasses: classes.length,
+    });
+  }, [students, teachers, classes]);
 
   // AcademyContext의 academyId가 준비되면 데이터 로드
   useEffect(() => {
@@ -1403,8 +1432,52 @@ const Classes = () => {
     return result;
   }, [classrooms]);
 
+  const statCards = [
+    {
+      title: '금일 현황',
+      value: stats.todayStatus,
+      icon: '📅',
+      iconBg: '#E3F2FD',
+      onClick: () => navigate('/today-status'),
+    },
+    {
+      title: '총 학생 수',
+      value: stats.totalStudents,
+      icon: '🎓',
+      iconBg: '#E8F5E9',
+      onClick: () => navigate('/students'),
+    },
+    {
+      title: '총 선생님 수',
+      value: stats.totalTeachers,
+      icon: '👨‍🏫',
+      iconBg: '#FFF3E0',
+      onClick: () => navigate('/teachers'),
+    },
+  ];
+
   return (
     <div className="classes-page">
+      {/* 현황 카드 섹션 */}
+      <section className="status-section">
+        <div className="stat-cards">
+          {statCards.map((card, index) => (
+            <div key={index} className="stat-card" onClick={card.onClick}>
+              <div className="stat-card-icon" style={{ backgroundColor: card.iconBg }}>
+                <span>{card.icon}</span>
+              </div>
+              <div className="stat-card-content">
+                <div className="stat-card-value">{card.value}</div>
+                <div className="stat-card-title">{card.title}</div>
+              </div>
+              <button className="stat-card-button">
+                자세히 보기 →
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* 자동 복귀 알림 다이얼로그 */}
       {showReturnDialog && (
         <div 
@@ -1498,14 +1571,10 @@ const Classes = () => {
           <button
             className="add-class-header-button"
             onClick={() => {
-              setSelectedTimeSlot(null);
-              setSelectedClassroom(null);
-              setEditingClass(null);
-              setFormData({});
-              setIsModalOpen(true);
+              setRegisterModalOpen(true);
             }}
           >
-            + 수업 추가
+            등록하기
           </button>
         </div>
       </div>
@@ -2837,10 +2906,39 @@ const Classes = () => {
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => {
-                            const today = new Date().toLocaleDateString('ko-KR');
-                            alert(`${student.name} 학생의 출석이 기록되었습니다.\n날짜: ${today}`);
-                            // TODO: 출석 데이터 저장 로직 추가
+                          onClick={async () => {
+                            if (!academyId || !selectedClassForStudents) {
+                              alert('학원 정보 또는 수업 정보가 없습니다.');
+                              return;
+                            }
+
+                            try {
+                              const today = new Date();
+                              const dateStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+
+                              await attendanceService.create({
+                                academyId,
+                                studentId: student.id,
+                                classId: selectedClassForStudents.id,
+                                date: dateStr,
+                                status: 'present',
+                                note: '',
+                              });
+
+                              // 학생 상세 페이지에 출석 변경 알림
+                              localStorage.setItem('studentAttendanceUpdate', JSON.stringify({
+                                studentId: student.id,
+                                timestamp: Date.now(),
+                                action: 'create',
+                                date: dateStr,
+                              }));
+
+                              const todayFormatted = today.toLocaleDateString('ko-KR');
+                              alert(`${student.name} 학생의 출석이 기록되었습니다.\n날짜: ${todayFormatted}`);
+                            } catch (error) {
+                              console.error('출석 등록 실패:', error);
+                              alert('출석 등록에 실패했습니다.');
+                            }
                           }}
                           style={{
                             padding: '6px 12px',
@@ -2860,10 +2958,39 @@ const Classes = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            const today = new Date().toLocaleDateString('ko-KR');
-                            alert(`${student.name} 학생의 결석이 기록되었습니다.\n날짜: ${today}`);
-                            // TODO: 결석 데이터 저장 로직 추가
+                          onClick={async () => {
+                            if (!academyId || !selectedClassForStudents) {
+                              alert('학원 정보 또는 수업 정보가 없습니다.');
+                              return;
+                            }
+
+                            try {
+                              const today = new Date();
+                              const dateStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+
+                              await attendanceService.create({
+                                academyId,
+                                studentId: student.id,
+                                classId: selectedClassForStudents.id,
+                                date: dateStr,
+                                status: 'absent',
+                                note: '',
+                              });
+
+                              // 학생 상세 페이지에 출석 변경 알림
+                              localStorage.setItem('studentAttendanceUpdate', JSON.stringify({
+                                studentId: student.id,
+                                timestamp: Date.now(),
+                                action: 'create',
+                                date: dateStr,
+                              }));
+
+                              const todayFormatted = today.toLocaleDateString('ko-KR');
+                              alert(`${student.name} 학생의 결석이 기록되었습니다.\n날짜: ${todayFormatted}`);
+                            } catch (error) {
+                              console.error('결석 등록 실패:', error);
+                              alert('결석 등록에 실패했습니다.');
+                            }
                           }}
                           style={{
                             padding: '6px 12px',
@@ -2883,10 +3010,39 @@ const Classes = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            const today = new Date().toLocaleDateString('ko-KR');
-                            alert(`${student.name} 학생의 이월이 기록되었습니다.\n날짜: ${today}`);
-                            // TODO: 이월 데이터 저장 로직 추가
+                          onClick={async () => {
+                            if (!academyId || !selectedClassForStudents) {
+                              alert('학원 정보 또는 수업 정보가 없습니다.');
+                              return;
+                            }
+
+                            try {
+                              const today = new Date();
+                              const dateStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+
+                              await attendanceService.create({
+                                academyId,
+                                studentId: student.id,
+                                classId: selectedClassForStudents.id,
+                                date: dateStr,
+                                status: 'official', // 이월은 공결로 처리
+                                note: '이월',
+                              });
+
+                              // 학생 상세 페이지에 출석 변경 알림
+                              localStorage.setItem('studentAttendanceUpdate', JSON.stringify({
+                                studentId: student.id,
+                                timestamp: Date.now(),
+                                action: 'create',
+                                date: dateStr,
+                              }));
+
+                              const todayFormatted = today.toLocaleDateString('ko-KR');
+                              alert(`${student.name} 학생의 이월이 기록되었습니다.\n날짜: ${todayFormatted}`);
+                            } catch (error) {
+                              console.error('이월 등록 실패:', error);
+                              alert('이월 등록에 실패했습니다.');
+                            }
                           }}
                           style={{
                             padding: '6px 12px',
@@ -2923,6 +3079,12 @@ const Classes = () => {
           </div>
         )}
       </Modal>
+      
+      {/* 등록 모달 */}
+      <RegisterModal
+        isOpen={registerModalOpen}
+        onClose={() => setRegisterModalOpen(false)}
+      />
     </div>
   );
 };

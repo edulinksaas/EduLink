@@ -1116,8 +1116,476 @@
   padding: 24px;
 }
 
+.attendance-calendar-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.calendar-nav-button {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.calendar-nav-button:hover {
+  background-color: #f3f4f6;
+}
+
+.calendar-month-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #111827;
+  min-width: 120px;
+  text-align: center;
+}
+
+.calendar-today-button {
+  padding: 6px 16px;
+  background-color: #3498db;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.calendar-today-button:hover:not(:disabled) {
+  background-color: #2980b9;
+}
+
+.calendar-today-button:disabled {
+  background-color: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.attendance-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background-color: #f9fafb;
+  border-radius: 8px;
+}
+
+.attendance-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.attendance-stat-label {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.attendance-stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
 .attendance-calendar-header {
   margin-bottom: 16px;
   text-align: center;
+}
+
+.calendar-weekday {
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #111827;
+  padding: 8px 0;
+}
+
+.calendar-weekday--sun {
+  color: #ef4444;
+}
+
+.calendar-weekday--sat {
+  color: #3b82f6;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: #ffffff;
+  border: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.calendar-day:hover {
+  background-color: #f9fafb;
+}
+
+.calendar-day--outside {
+  color: #d1d5db;
+  background-color: #f9fafb;
+}
+
+.calendar-day--sun {
+  color: #ef4444;
+}
+
+.calendar-day--sat {
+  color: #3b82f6;
+}
+
+.calendar-day--today {
+  background-color: #eff6ff;
+  border-color: #3b82f6;
+  font-weight: 700;
+}
+
+.calendar-day--present {
+  background-color: #d1fae5;
+}
+
+.calendar-day--absent {
+  background-color: #fee2e2;
+}
+
+.calendar-day--late {
+  background-color: #fef3c7;
+}
+
+.calendar-day--earlyLeave {
+  background-color: #fce7f3;
+}
+
+.calendar-day--sick {
+  background-color: #e0e7ff;
+}
+
+.calendar-day--official {
+  background-color: #f3e8ff;
+}
+
+.calendar-day-number {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.calendar-day-status {
+  font-size: 1rem;
+  margin-top: 2px;
+}
+
+.calendar-day-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 2px;
+  max-width: 100%;
+}
+
+.calendar-day-statuses .calendar-day-status {
+  font-size: 0.85rem;
+  margin: 0;
+  line-height: 1;
+}
+
+.attendance-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-icon {
+  font-size: 1rem;
+}
+
+.legend-label {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+/* 출석 등록 모달 */
+.attendance-form-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.attendance-form-modal {
+  background-color: #ffffff;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.attendance-form-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.attendance-form-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+}
+
+.attendance-form-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.attendance-form-modal-close:hover {
+  color: #111827;
+}
+
+.attendance-form-modal-body {
+  padding: 24px;
+}
+
+.attendance-form-group {
+  margin-bottom: 20px;
+}
+
+.attendance-form-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.attendance-status-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.attendance-status-button {
+  padding: 12px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background-color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.attendance-status-button:hover {
+  border-color: #4f46e5;
+  background-color: #f5f3ff;
+}
+
+.attendance-status-button.active {
+  border-color: #4f46e5;
+  background-color: #4f46e5;
+  color: #ffffff;
+}
+
+.attendance-form-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.attendance-form-textarea:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.attendance-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.attendance-form-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.attendance-form-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.attendance-form-button--cancel {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.attendance-form-button--cancel:hover:not(:disabled) {
+  background-color: #e5e7eb;
+}
+
+.attendance-form-button--save {
+  background-color: #4f46e5;
+  color: #ffffff;
+}
+
+.attendance-form-button--save:hover:not(:disabled) {
+  background-color: #4338ca;
+}
+
+.attendance-form-button--delete {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+.attendance-form-button--delete:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+/* 출석 기록 리스트 */
+.attendance-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px;
+  background-color: #f9fafb;
+  border-radius: 8px;
+}
+
+.attendance-record-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.attendance-record-item:hover {
+  border-color: #4f46e5;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.attendance-record-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.attendance-record-emoji {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.attendance-record-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attendance-record-status {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.attendance-record-note {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.attendance-record-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.attendance-record-edit-button,
+.attendance-record-delete-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.attendance-record-edit-button {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.attendance-record-edit-button:hover:not(:disabled) {
+  background-color: #e5e7eb;
+}
+
+.attendance-record-delete-button {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.attendance-record-delete-button:hover:not(:disabled) {
+  background-color: #fecaca;
 }
 

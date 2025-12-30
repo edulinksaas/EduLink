@@ -6,7 +6,6 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
 import TodayStatus from './pages/TodayStatus';
 import Academies from './pages/Academies';
 import Subjects from './pages/Subjects';
@@ -38,7 +37,7 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <Dashboard />
+                    <Classes />
                   </Layout>
                 </ProtectedRoute>
               }

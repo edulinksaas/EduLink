@@ -2088,9 +2088,19 @@ const Classes = () => {
                   fontSize: '1rem',
                 }}
                 value={studentFormData.class_id}
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, class_id: e.target.value })
-                }
+                onChange={(e) => {
+                  const selectedClassId = e.target.value;
+                  console.log('🎯 수업 선택 onChange 실행됨!', selectedClassId);
+                  const selectedClass = classes.find(c => c.id === selectedClassId);
+                  console.log('📚 선택된 수업 정보:', selectedClass);
+                  console.log('📚 수업의 class_type:', selectedClass?.class_type);
+                  // 수업 변경 시 수강료 초기화 (다른 유형의 수강료가 선택되어 있을 수 있음)
+                  setStudentFormData({ 
+                    ...studentFormData, 
+                    class_id: selectedClassId,
+                    fee: '' // 수업 변경 시 수강료 초기화
+                  });
+                }}
                 required
               >
                 <option value="">선택하세요</option>
@@ -2153,19 +2163,55 @@ const Classes = () => {
                   });
                 }}
                 required
+                disabled={!studentFormData.class_id}
               >
-                <option value="">선택하세요</option>
-                {tuitionFees.map((fee) => {
-                  // 수강료 표시 형식: "수업유형 - 결제방법: 금액" 또는 "금액"
-                  const displayText = fee.class_type && fee.payment_method
-                    ? `${fee.class_type} - ${fee.payment_method}: ${fee.amount}`
-                    : fee.amount;
-                  return (
-                    <option key={fee.id} value={fee.value}>
-                      {displayText}
-                    </option>
-                  );
-                })}
+                <option value="">
+                  {studentFormData.class_id ? '선택하세요' : '수업을 먼저 선택하세요'}
+                </option>
+                {(() => {
+                  console.log('🔄 수강료 드롭다운 렌더링 중...');
+                  console.log('📝 현재 studentFormData.class_id:', studentFormData.class_id);
+                  console.log('📚 전체 classes:', classes);
+                  
+                  // 선택된 수업의 class_type 확인
+                  const selectedClass = classes.find(c => c.id === studentFormData.class_id);
+                  const selectedClassType = selectedClass?.class_type;
+                  
+                  console.log('🔍 선택된 수업:', selectedClass);
+                  console.log('🔍 선택된 수업의 class_type:', selectedClassType);
+                  console.log('💰 전체 수강료:', tuitionFees);
+                  
+                  // 선택된 수업의 class_type에 맞는 수강료만 필터링
+                  const filteredFees = selectedClassType
+                    ? tuitionFees.filter(fee => {
+                        // class_type이 null이거나 undefined인 수강료는 제외
+                        // 정확히 일치하는 경우만 포함
+                        const matches = fee.class_type === selectedClassType;
+                        console.log(`비교: 수강료 class_type="${fee.class_type}" === 수업 class_type="${selectedClassType}" => ${matches}`, fee);
+                        return matches;
+                      })
+                    : tuitionFees; // 수업 미선택 시 모든 수강료 표시 (실제로는 disabled 상태)
+                  
+                  console.log('📋 필터링된 수강료:', filteredFees);
+                  
+                  if (selectedClassType && filteredFees.length === 0) {
+                    console.warn('⚠️ 해당 수업 유형에 맞는 수강료가 없습니다. 수강료에 class_type이 설정되어 있는지 확인하세요.');
+                    console.warn('⚠️ 수업 class_type:', selectedClassType);
+                    console.warn('⚠️ 수강료들의 class_type:', tuitionFees.map(f => f.class_type));
+                  }
+                  
+                  return filteredFees.map((fee) => {
+                    // 수강료 표시 형식: "수업유형 - 결제방법: 금액" 또는 "금액"
+                    const displayText = fee.class_type && fee.payment_method
+                      ? `${fee.class_type} - ${fee.payment_method}: ${fee.amount}`
+                      : fee.amount;
+                    return (
+                      <option key={fee.id} value={fee.value}>
+                        {displayText}
+                      </option>
+                    );
+                  });
+                })()}
               </select>
             </div>
 

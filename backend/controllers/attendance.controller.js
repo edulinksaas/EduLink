@@ -64,4 +64,39 @@ export const createAttendance = async (req, res, next) => {
   }
 };
 
+// DELETE /api/attendance/:id
+export const deleteAttendance = async (req, res, next) => {
+  try {
+    console.log('\n🎯 deleteAttendance 컨트롤러 호출됨!');
+    console.log('   req.method:', req.method);
+    console.log('   req.originalUrl:', req.originalUrl);
+    console.log('   req.path:', req.path);
+    console.log('   req.params:', req.params);
+    
+    const { id } = req.params;
+    
+    console.log('   요청된 ID:', id);
+
+    if (!id) {
+      return res.status(400).json({ error: 'id is required' });
+    }
+
+    const record = await AttendanceRecord.findById(id);
+    
+    console.log('찾은 기록:', record);
+    
+    if (!record) {
+      console.log('기록을 찾을 수 없음');
+      return res.status(404).json({ error: 'Attendance record not found' });
+    }
+
+    await record.delete();
+    console.log('기록 삭제 완료');
+    res.json({ message: 'Attendance record deleted successfully' });
+  } catch (error) {
+    console.error('출석 기록 삭제 중 오류:', error);
+    next(error);
+  }
+};
+
 

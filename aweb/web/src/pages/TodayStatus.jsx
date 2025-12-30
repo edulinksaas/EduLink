@@ -6,6 +6,7 @@ import { classService } from '../services/classService';
 import { teacherService } from '../services/teacherService';
 import { subjectService } from '../services/subjectService';
 import Modal from '../components/Modal';
+import RegisterModal from '../components/RegisterModal';
 import './TodayStatus.css';
 
 const TodayStatus = () => {
@@ -14,6 +15,7 @@ const TodayStatus = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [academies, setAcademies] = useState([]);
   const [selectedAcademy, setSelectedAcademy] = useState('');
@@ -312,34 +314,39 @@ const TodayStatus = () => {
     <div className="today-status-page">
       <div className="page-header">
         <h1 className="page-title">금일 현황</h1>
-        <div className="filter-section">
-          <select 
-            className="category-select"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="학생명">학생명</option>
-            <option value="선생님명">선생님명</option>
-            <option value="과목명">과목명</option>
-            <option value="연락처">연락처</option>
-          </select>
-          <div className="search-box">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            />
-            <button className="search-button" onClick={handleSearch}>
-              <span className="search-icon">🔍</span>
+        <div className="header-right-section">
+          <div className="filter-section">
+            <select 
+              className="category-select"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="학생명">학생명</option>
+              <option value="선생님명">선생님명</option>
+              <option value="과목명">과목명</option>
+              <option value="연락처">연락처</option>
+            </select>
+            <div className="search-box">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              <button className="search-button" onClick={handleSearch}>
+                <span className="search-icon">🔍</span>
+              </button>
+            </div>
+            <button 
+              className="register-top-button" 
+              onClick={() => setRegisterModalOpen(true)}
+            >
+              <span className="register-icon">➕</span>
+              등록하기
             </button>
           </div>
-          <button className="register-button" onClick={handleRegister}>
-            <span className="register-icon">➕</span>
-            학생 등록
-          </button>
         </div>
       </div>
 
@@ -684,6 +691,12 @@ const TodayStatus = () => {
           </div>
         </form>
       </Modal>
+      
+      {/* 등록 모달 */}
+      <RegisterModal
+        isOpen={registerModalOpen}
+        onClose={() => setRegisterModalOpen(false)}
+      />
     </div>
   );
 };

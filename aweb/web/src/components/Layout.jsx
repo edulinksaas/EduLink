@@ -1,9 +1,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAcademy } from '../contexts/AcademyContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useWelcomeGuide } from '../contexts/WelcomeGuideContext';
-import WelcomeGuideModal from './WelcomeGuideModal';
+import RegisterModal from './RegisterModal';
+import { FaGraduationCap, FaUsers, FaPlus, FaCog, FaQuestionCircle, FaSignOutAlt, FaTimes } from 'react-icons/fa';
 import './Layout.css';
 
 const Layout = ({ children }) => {
@@ -11,13 +11,8 @@ const Layout = ({ children }) => {
   const navigate = useNavigate();
   const { academy, loading } = useAcademy();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const { logout } = useAuth();
-  const { showWelcomeGuide, openWelcomeGuide, closeWelcomeGuide } = useWelcomeGuide();
-
-  const handleDontShowAgain = () => {
-    localStorage.setItem('dontShowWelcomeGuide', 'true');
-    closeWelcomeGuide();
-  };
 
   const handleLogout = () => {
     if (window.confirm('로그아웃하시겠습니까?')) {
@@ -35,11 +30,45 @@ const Layout = ({ children }) => {
   };
 
   const sidebarMenuItems = [
-    { path: '/students', label: '전체 학생 페이지', icon: '👨‍🎓' },
-    { path: '/teachers', label: '전체 선생님 페이지', icon: '👨‍🏫' },
-    { path: '/classes', label: '전체 시간표 페이지', icon: '📖' },
-    { path: '/students?action=register', label: '학생 등록', icon: '➕' },
-    { path: '/classes?action=register', label: '수업 등록', icon: '➕' },
+    { 
+      path: '/students', 
+      label: '전체 학생 페이지', 
+      icon: FaGraduationCap, 
+      iconColor: '#FFC107' // 노란색
+    },
+    { 
+      path: '/teachers', 
+      label: '전체 선생님 페이지', 
+      icon: FaUsers, 
+      iconColor: '#4CAF50' // 초록색
+    },
+    { 
+      path: '/enrollments', 
+      label: '등록', 
+      icon: FaPlus, 
+      iconColor: '#2196F3', // 파란색
+      isRegister: true
+    },
+    { 
+      path: '/settings', 
+      label: '설정', 
+      icon: FaCog, 
+      iconColor: '#757575' // 회색
+    },
+    { 
+      path: '/help', 
+      label: '도움말', 
+      icon: FaQuestionCircle, 
+      iconColor: '#757575', // 회색
+      isHelp: true
+    },
+    { 
+      path: '/logout', 
+      label: '로그아웃', 
+      icon: FaSignOutAlt, 
+      iconColor: '#757575', // 회색
+      isButton: true
+    },
   ];
 
   const menuItems = [
@@ -69,21 +98,72 @@ const Layout = ({ children }) => {
         <div className="sidebar-header">
           <h2 className="sidebar-title">메뉴</h2>
           <button className="sidebar-close" onClick={closeSidebar}>
-            ✕
+            <FaTimes />
           </button>
         </div>
         <nav className="sidebar-nav">
-          {sidebarMenuItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`sidebar-nav-item ${location.pathname === item.path ? 'active' : ''}`}
-              onClick={closeSidebar}
-            >
-              <span className="sidebar-nav-icon">{item.icon}</span>
-              <span className="sidebar-nav-label">{item.label}</span>
-            </Link>
-          ))}
+          {sidebarMenuItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = location.pathname === item.path;
+            
+            if (item.isButton && item.path === '/logout') {
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => {
+                    closeSidebar();
+                    handleLogout();
+                  }}
+                  className="sidebar-nav-item sidebar-nav-button"
+                >
+                  <IconComponent className="sidebar-nav-icon" style={{ color: item.iconColor }} />
+                  <span className="sidebar-nav-label">{item.label}</span>
+                </button>
+              );
+            }
+            
+            if (item.isHelp) {
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                  onClick={closeSidebar}
+                >
+                  <IconComponent className="sidebar-nav-icon" style={{ color: item.iconColor }} />
+                  <span className="sidebar-nav-label">{item.label}</span>
+                </Link>
+              );
+            }
+            
+            if (item.isRegister) {
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => {
+                    closeSidebar();
+                    setRegisterModalOpen(true);
+                  }}
+                  className="sidebar-nav-item sidebar-nav-button"
+                >
+                  <IconComponent className="sidebar-nav-icon" style={{ color: item.iconColor }} />
+                  <span className="sidebar-nav-label">{item.label}</span>
+                </button>
+              );
+            }
+            
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                onClick={closeSidebar}
+              >
+                <IconComponent className="sidebar-nav-icon" style={{ color: item.iconColor }} />
+                <span className="sidebar-nav-label">{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       </aside>
 
@@ -112,14 +192,6 @@ const Layout = ({ children }) => {
           </Link>
         </div>
         <nav className="top-nav">
-          <button
-            onClick={openWelcomeGuide}
-            className="top-nav-item"
-            title="사용법"
-          >
-            <span className="nav-icon">📖</span>
-            <span className="nav-label">사용법</span>
-          </button>
           {topNavItems.map((item) => {
             if (item.path === '/logout') {
               return (
@@ -152,11 +224,10 @@ const Layout = ({ children }) => {
         {children}
       </main>
       
-      {/* 환영 가이드 모달 - 모든 페이지에서 사용 가능 */}
-      <WelcomeGuideModal
-        isOpen={showWelcomeGuide}
-        onClose={closeWelcomeGuide}
-        onDontShowAgain={handleDontShowAgain}
+      {/* 등록 모달 */}
+      <RegisterModal
+        isOpen={registerModalOpen}
+        onClose={() => setRegisterModalOpen(false)}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from './Modal';
 import Form from './Form';
 import { classService } from '../services/classService';
@@ -156,7 +156,12 @@ const ClassFormModal = ({
           }
         }
       } catch (error) {
-        console.warn('시간표 설정 로드 실패:', error);
+        // 429 에러 등 rate limit 에러는 재시도하지 않음
+        if (error?.response?.status === 429) {
+          console.warn('⚠️ API 요청 제한 초과, localStorage로 폴백');
+        } else {
+          console.warn('시간표 설정 로드 실패:', error);
+        }
         // localStorage에서 폴백
         const saved = localStorage.getItem('timetableSettings');
         if (saved) {
@@ -436,8 +441,8 @@ const ClassFormModal = ({
     { name: 'max_students', label: '정원', required: true, type: 'number' },
   ];
 
-  // 필드 옵션 및 커스터마이징
-  const processedFields = fields.map(field => {
+  // 필드 옵션 및 커스터마이징 (formData 변경 시 재계산)
+  const processedFields = useMemo(() => fields.map(field => {
     if (field.name === 'subject_id') {
       // 선택된 선생님의 과목만 필터링
       const selectedTeacherId = formData.teacher_id || editingClass?.teacher_id || defaultTeacherId || null;
@@ -610,7 +615,7 @@ const ClassFormModal = ({
             displayEndTime = calculatedEndTime;
             // formData에 자동으로 반영
             if (!fd.end_time || fd.end_time !== calculatedEndTime) {
-              handleFormChange('end_time', calculatedEndTime, { ...fd, end_time: calculatedEndTime });
+              onChange('end_time', calculatedEndTime);
             }
           } else if (fd.end_time) {
             // 시작 시간이 없고 종료 시간이 있으면 기존 값 사용 (수정 모드)
@@ -640,7 +645,7 @@ const ClassFormModal = ({
                 finalHour = calcHour;
                 finalMinute = calcMinute;
                 // formData 강제 업데이트
-                handleFormChange('end_time', calculatedEndTime, { ...fd, end_time: calculatedEndTime });
+                onChange('end_time', calculatedEndTime);
               } else {
                 // 계산 실패 시 시작 시간 + 1시간 (최소값)
                 finalHour = startHour + 1;
@@ -659,7 +664,7 @@ const ClassFormModal = ({
             finalHour = Math.floor(operatingEndMinutes / 60);
             finalMinute = operatingEndMinutes % 60;
             const limitedEndTime = `${String(finalHour).padStart(2, '0')}:${String(finalMinute).padStart(2, '0')}`;
-            handleFormChange('end_time', limitedEndTime, { ...fd, end_time: limitedEndTime });
+            onChange('end_time', limitedEndTime);
           }
           
           // currentHour가 availableHours에 포함되는지 확인
@@ -692,9 +697,7 @@ const ClassFormModal = ({
             if (newHourNum < startHour || (newHourNum === startHour && startMinute >= 55)) {
               // 잘못된 선택이면 계산된 종료 시간으로 복원
               if (calculatedEndTime) {
-                const [calcHour, calcMinute] = calculatedEndTime.split(':').map(Number);
-                setField('end_time', calculatedEndTime);
-                handleFormChange('end_time', calculatedEndTime, { ...fd, end_time: calculatedEndTime });
+                onChange('end_time', calculatedEndTime);
                 return;
               }
             }
@@ -710,14 +713,12 @@ const ClassFormModal = ({
             if (newTimeMinutes <= startMinutes) {
               // 잘못된 선택이면 계산된 종료 시간으로 복원
               if (calculatedEndTime) {
-                setField('end_time', calculatedEndTime);
-                handleFormChange('end_time', calculatedEndTime, { ...fd, end_time: calculatedEndTime });
+                onChange('end_time', calculatedEndTime);
                 return;
               }
             }
             
-            setField('end_time', newTime);
-            handleFormChange('end_time', newTime, { ...fd, end_time: newTime });
+            onChange('end_time', newTime);
           };
 
           const handleMinuteChange = (e) => {
@@ -730,14 +731,12 @@ const ClassFormModal = ({
             if (newTimeMinutes <= startMinutes) {
               // 잘못된 선택이면 계산된 종료 시간으로 복원
               if (calculatedEndTime) {
-                setField('end_time', calculatedEndTime);
-                handleFormChange('end_time', calculatedEndTime, { ...fd, end_time: calculatedEndTime });
+                onChange('end_time', calculatedEndTime);
                 return;
               }
             }
             
-            setField('end_time', newTime);
-            handleFormChange('end_time', newTime, { ...fd, end_time: newTime });
+            onChange('end_time', newTime);
           };
 
           return (
@@ -880,7 +879,6 @@ const ClassFormModal = ({
             const newTime = `${newHour}:${currentMinute}`;
             // 종료 시간 자동 계산 (현재 timeInterval 사용)
             const calculatedEndTime = calculateEndTime(newTime);
-            console.log('시작 시간 변경:', newTime, '종료 시간 계산:', calculatedEndTime, '시간 간격:', timeInterval);
             
             // 시작 시간과 종료 시간을 함께 업데이트
             const updatedFormData = { ...fd, start_time: newTime };
@@ -888,17 +886,13 @@ const ClassFormModal = ({
               updatedFormData.end_time = calculatedEndTime;
             }
             
-            // Form의 상태를 직접 업데이트
-            setField('start_time', newTime);
+            // onChange를 통해 상태 업데이트
+            onChange('start_time', newTime);
             if (calculatedEndTime) {
-              // 다음 틱에서 종료 시간 업데이트 (시작 시간 업데이트 후)
               setTimeout(() => {
-                setField('end_time', calculatedEndTime);
+                onChange('end_time', calculatedEndTime);
               }, 0);
             }
-            
-            // handleFormChange 호출하여 ClassFormModal의 상태도 업데이트
-            handleFormChange('start_time', newTime, updatedFormData);
           };
 
           const handleMinuteChange = (e) => {
@@ -906,7 +900,6 @@ const ClassFormModal = ({
             const newTime = `${currentHour}:${newMinute}`;
             // 종료 시간 자동 계산 (현재 timeInterval 사용)
             const calculatedEndTime = calculateEndTime(newTime);
-            console.log('시작 시간 변경:', newTime, '종료 시간 계산:', calculatedEndTime, '시간 간격:', timeInterval);
             
             // 시작 시간과 종료 시간을 함께 업데이트
             const updatedFormData = { ...fd, start_time: newTime };
@@ -914,17 +907,13 @@ const ClassFormModal = ({
               updatedFormData.end_time = calculatedEndTime;
             }
             
-            // Form의 상태를 직접 업데이트
-            setField('start_time', newTime);
+            // onChange를 통해 상태 업데이트
+            onChange('start_time', newTime);
             if (calculatedEndTime) {
-              // 다음 틱에서 종료 시간 업데이트 (시작 시간 업데이트 후)
               setTimeout(() => {
-                setField('end_time', calculatedEndTime);
+                onChange('end_time', calculatedEndTime);
               }, 0);
             }
-            
-            // handleFormChange 호출하여 ClassFormModal의 상태도 업데이트
-            handleFormChange('start_time', newTime, updatedFormData);
           };
 
           return (
@@ -964,7 +953,7 @@ const ClassFormModal = ({
       };
     }
     return field;
-  });
+  }), [formData, editingClass, selectedDay, defaultTeacherId, teachers, subjects, classTypes, classrooms, availableTimeSlots, timeSlots, selectedTimeSlot, dayTimeSettings, timeInterval, calculateEndTime]);
 
   // 초기 데이터 설정
   const getInitialData = () => {
@@ -986,6 +975,131 @@ const ClassFormModal = ({
     };
   };
 
+  // 버튼 형식으로 렌더링할 필드들
+  const renderButtonField = (label, options, selectedValue, onChange, disabledOptions = []) => {
+    return (
+      <div className="form-group" style={{ marginBottom: '20px' }}>
+        <label className="form-label" style={{ display: 'block', marginBottom: '10px', fontWeight: '600', color: '#2c3e50' }}>
+          {label} <span className="required" style={{ color: '#e74c3c' }}>*</span>
+        </label>
+        <div className="button-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {options.map((option) => {
+            const isSelected = selectedValue === option.value;
+            const isDisabled = disabledOptions.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => !isDisabled && onChange(option.value)}
+                disabled={isDisabled}
+                style={{
+                  padding: '10px 20px',
+                  border: `2px solid ${isSelected ? '#667eea' : '#e0e0e0'}`,
+                  borderRadius: '8px',
+                  background: isSelected ? '#667eea' : 'white',
+                  color: isSelected ? 'white' : '#2c3e50',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: isSelected ? '600' : '500',
+                  transition: 'all 0.2s',
+                  opacity: isDisabled ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDisabled && !isSelected) {
+                    e.target.style.borderColor = '#667eea';
+                    e.target.style.background = '#f0f0ff';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isDisabled && !isSelected) {
+                    e.target.style.borderColor = '#e0e0e0';
+                    e.target.style.background = 'white';
+                  }
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // 필터링된 옵션들
+  const getAvailableDays = () => {
+    let availableDays = days;
+    if (defaultTeacherId) {
+      const defaultTeacher = teachers.find(t => t.id === defaultTeacherId);
+      if (defaultTeacher && defaultTeacher.work_days) {
+        const workDaysArray = defaultTeacher.work_days.split(',').map(d => d.trim());
+        if (workDaysArray.length > 0) {
+          availableDays = days.filter(d => workDaysArray.includes(d));
+        }
+      }
+    }
+    return availableDays.map(d => ({ value: d, label: d }));
+  };
+
+  const getAvailableTeachers = () => {
+    if (defaultTeacherId) {
+      const defaultTeacher = teachers.find(t => t.id === defaultTeacherId);
+      return defaultTeacher ? [{ value: defaultTeacher.id, label: defaultTeacher.name }] : [];
+    }
+    const selectedSchedule = formData.schedule || editingClass?.schedule || selectedDay;
+    let availableTeachers = teachers;
+    if (selectedSchedule) {
+      availableTeachers = teachers.filter(teacher => {
+        if (!teacher.work_days) return false;
+        const workDaysArray = teacher.work_days.split(',').map(d => d.trim());
+        return workDaysArray.includes(selectedSchedule);
+      });
+    }
+    return availableTeachers.map(t => ({ value: t.id, label: t.name }));
+  };
+
+  const getAvailableSubjects = () => {
+    const selectedTeacherId = formData.teacher_id || editingClass?.teacher_id || defaultTeacherId || null;
+    let availableSubjects = subjects;
+    if (selectedTeacherId) {
+      const selectedTeacher = teachers.find(t => t.id === selectedTeacherId);
+      if (selectedTeacher) {
+        const teacherSubjectIds = selectedTeacher.subject_ids && selectedTeacher.subject_ids.length > 0
+          ? selectedTeacher.subject_ids
+          : selectedTeacher.subject_id
+            ? [selectedTeacher.subject_id]
+            : [];
+        if (teacherSubjectIds.length > 0) {
+          availableSubjects = subjects.filter(s => teacherSubjectIds.includes(s.id));
+        }
+      }
+    }
+    return availableSubjects.map(s => ({ value: s.id, label: s.name }));
+  };
+
+  const getAvailableClassTypes = () => {
+    return classTypes.length > 0
+      ? classTypes.map(type => {
+          const typeName = typeof type === 'string' ? type : type.name;
+          return { value: typeName, label: typeName };
+        })
+      : [
+          { value: '단체반', label: '단체반' },
+          { value: '2대1레슨', label: '2대1레슨' },
+          { value: '개인 레슨', label: '개인 레슨' },
+        ];
+  };
+
+  const getAvailableClassrooms = () => {
+    return classrooms.map(c => ({ value: c.id, label: c.name }));
+  };
+
+  // 현재 formData 계산 (항상 최신 상태 유지)
+  const currentFormData = useMemo(() => {
+    const initial = getInitialData();
+    return { ...initial, ...formData };
+  }, [formData, editingClass, selectedTimeSlot, selectedDay, selectedClassroom, defaultTeacherId, availableTimeSlots, timeSlots]);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -995,38 +1109,41 @@ const ClassFormModal = ({
       }}
       title={editingClass ? '수업 수정' : '수업 등록하기'}
     >
-      <Form
-        fields={processedFields}
-        onSubmit={handleSubmit}
-        onChange={(name, value, newData) => {
-          // start_time이 변경되면 end_time도 자동 계산하여 업데이트
-          if (name === 'start_time' && value) {
-            const calculatedEndTime = calculateEndTime(value);
-            if (calculatedEndTime) {
-              newData.end_time = calculatedEndTime;
-            }
-          }
-          // 요일이 변경되면 선생님도 초기화 (해당 요일에 출근하지 않는 선생님일 수 있으므로)
-          // 단, defaultTeacherId가 있으면 선생님은 고정이므로 초기화하지 않음
-          if (name === 'schedule' && value && !defaultTeacherId) {
-            const selectedSchedule = value;
-            const currentTeacherId = newData.teacher_id;
-            
-            if (currentTeacherId) {
-              const currentTeacher = teachers.find(t => t.id === currentTeacherId);
-              if (currentTeacher && currentTeacher.work_days) {
-                const workDaysArray = currentTeacher.work_days.split(',').map(d => d.trim());
-                // 현재 선택된 선생님이 새 요일에 출근하지 않으면 초기화
-                if (!workDaysArray.includes(selectedSchedule)) {
-                  newData.teacher_id = '';
-                  newData.subject_id = ''; // 선생님이 초기화되면 과목도 초기화
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        handleSubmit(currentFormData);
+      }} style={{ padding: '0' }}>
+        {/* 요일 선택 버튼 */}
+        {renderButtonField(
+          '요일',
+          getAvailableDays(),
+          currentFormData.schedule,
+          (value) => {
+            const newData = { ...currentFormData, schedule: value };
+            if (!defaultTeacherId) {
+              const currentTeacherId = newData.teacher_id;
+              if (currentTeacherId) {
+                const currentTeacher = teachers.find(t => t.id === currentTeacherId);
+                if (currentTeacher && currentTeacher.work_days) {
+                  const workDaysArray = currentTeacher.work_days.split(',').map(d => d.trim());
+                  if (!workDaysArray.includes(value)) {
+                    newData.teacher_id = '';
+                    newData.subject_id = '';
+                  }
                 }
               }
             }
+            handleFormChange('schedule', value, newData);
           }
-          // 선생님이 변경되면 과목도 초기화 (선생님의 과목이 아닐 수 있으므로)
-          if (name === 'teacher_id' && value) {
-            // 과목 필드를 초기화하여 새로 선택하도록 함
+        )}
+
+        {/* 선생님 선택 버튼 */}
+        {renderButtonField(
+          '선생님',
+          getAvailableTeachers(),
+          currentFormData.teacher_id,
+          (value) => {
+            const newData = { ...currentFormData, teacher_id: value };
             if (newData.subject_id) {
               const selectedTeacher = teachers.find(t => t.id === value);
               if (selectedTeacher) {
@@ -1035,8 +1152,6 @@ const ClassFormModal = ({
                   : selectedTeacher.subject_id
                     ? [selectedTeacher.subject_id]
                     : [];
-                
-                // 현재 선택된 과목이 새 선생님의 과목 목록에 없으면 초기화
                 if (teacherSubjectIds.length > 0 && !teacherSubjectIds.includes(newData.subject_id)) {
                   newData.subject_id = '';
                 }
@@ -1044,16 +1159,192 @@ const ClassFormModal = ({
                 newData.subject_id = '';
               }
             }
+            handleFormChange('teacher_id', value, newData);
+          },
+          defaultTeacherId ? [] : []
+        )}
+
+        {/* 과목 선택 버튼 */}
+        {renderButtonField(
+          '과목',
+          getAvailableSubjects(),
+          currentFormData.subject_id,
+          (value) => {
+            handleFormChange('subject_id', value, { ...currentFormData, subject_id: value });
           }
-          handleFormChange(name, value, newData);
-        }}
-        onCancel={() => {
-          onClose();
-          setFormData({});
-        }}
-        initialData={getInitialData()}
-        key={`form-${editingClass?.id || 'new'}-${formData.start_time || ''}-${formData.end_time || ''}`}
-      />
+        )}
+
+        {/* 수업 유형 선택 버튼 */}
+        {renderButtonField(
+          '수업 유형',
+          getAvailableClassTypes(),
+          currentFormData.class_type,
+          (value) => {
+            handleFormChange('class_type', value, { ...currentFormData, class_type: value });
+          }
+        )}
+
+        {/* 강의실 선택 버튼 */}
+        {renderButtonField(
+          '강의실',
+          getAvailableClassrooms(),
+          currentFormData.classroom_id,
+          (value) => {
+            handleFormChange('classroom_id', value, { ...currentFormData, classroom_id: value });
+          }
+        )}
+
+        {/* 나머지 필드들은 Form 컴포넌트 사용 (form 태그 없이) */}
+        <div>
+          {processedFields
+            .filter(field => !['schedule', 'teacher_id', 'subject_id', 'class_type', 'classroom_id'].includes(field.name))
+            .map(field => {
+              const fieldValue = currentFormData[field.name] || '';
+              if (field.type === 'custom' && field.render) {
+                // 항상 최신 formData 사용
+                const latestFormData = { ...getInitialData(), ...formData };
+                return (
+                  <div key={`${field.name}-${latestFormData.start_time || ''}-${latestFormData.end_time || ''}`} className="form-group" style={{ marginBottom: '20px' }}>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '10px', fontWeight: '600', color: '#2c3e50' }}>
+                      {field.label} {field.required && <span className="required" style={{ color: '#e74c3c' }}>*</span>}
+                    </label>
+                    {field.render({
+                      formData: latestFormData,
+                      onChange: (name, value) => {
+                        setFormData(prevFormData => {
+                          const baseData = { ...getInitialData(), ...prevFormData };
+                          const newData = { ...baseData, [name]: value };
+                          if (name === 'start_time' && value) {
+                            const calculatedEndTime = calculateEndTime(value);
+                            if (calculatedEndTime) {
+                              newData.end_time = calculatedEndTime;
+                            }
+                          }
+                          handleFormChange(name, value, newData);
+                          return newData;
+                        });
+                      },
+                      setField: (name, value) => {
+                        setFormData(prevFormData => {
+                          const baseData = { ...getInitialData(), ...prevFormData };
+                          const newData = { ...baseData, [name]: value };
+                          handleFormChange(name, value, newData);
+                          return newData;
+                        });
+                      }
+                    })}
+                  </div>
+                );
+              } else if (field.type === 'number') {
+                return (
+                  <div key={field.name} className="form-group" style={{ marginBottom: '20px' }}>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '10px', fontWeight: '600', color: '#2c3e50' }}>
+                      {field.label} {field.required && <span className="required" style={{ color: '#e74c3c' }}>*</span>}
+                    </label>
+                    <input
+                      type="number"
+                      name={field.name}
+                      className="form-control"
+                      value={fieldValue}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        handleFormChange(field.name, value, { ...currentFormData, [field.name]: value });
+                      }}
+                      required={field.required}
+                      readOnly={field.readOnly}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        border: '1px solid #e0e0e0',
+                        borderRadius: '6px',
+                        fontSize: '0.95rem',
+                      }}
+                    />
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={field.name} className="form-group" style={{ marginBottom: '20px' }}>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '10px', fontWeight: '600', color: '#2c3e50' }}>
+                      {field.label} {field.required && <span className="required" style={{ color: '#e74c3c' }}>*</span>}
+                    </label>
+                    <input
+                      type="text"
+                      name={field.name}
+                      className="form-control"
+                      value={fieldValue}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        handleFormChange(field.name, value, { ...currentFormData, [field.name]: value });
+                      }}
+                      required={field.required}
+                      maxLength={field.maxLength}
+                      placeholder={field.placeholder}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        border: '1px solid #e0e0e0',
+                        borderRadius: '6px',
+                        fontSize: '0.95rem',
+                      }}
+                    />
+                  </div>
+                );
+              }
+            })}
+        </div>
+        <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e0e0e0' }}>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              setFormData({});
+            }}
+            className="btn btn-secondary"
+            style={{
+              padding: '10px 24px',
+              background: '#95a5a6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.95rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s',
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#7f8c8d'}
+            onMouseLeave={(e) => e.target.style.background = '#95a5a6'}
+          >
+            취소
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{
+              padding: '10px 24px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.95rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 4px rgba(102, 126, 234, 0.3)',
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 4px 8px rgba(102, 126, 234, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 2px 4px rgba(102, 126, 234, 0.3)';
+            }}
+          >
+            {editingClass ? '수정' : '등록하기'}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 };

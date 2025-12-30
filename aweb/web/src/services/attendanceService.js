@@ -28,6 +28,25 @@ export const attendanceService = {
       status: 'absent',
       note,
     }),
+
+  create: ({ academyId, studentId, classId, date, status, note }) =>
+    api.post('/attendance', {
+      academy_id: academyId,
+      student_id: studentId,
+      class_id: classId,
+      date,
+      status,
+      note: note || '',
+    }),
+
+  update: (attendanceId, { status, note }) =>
+    api.put(`/attendance/${attendanceId}`, {
+      status,
+      note: note || '',
+    }),
+
+  delete: (attendanceId) =>
+    api.delete(`/attendance/${attendanceId}`),
 };
 
 

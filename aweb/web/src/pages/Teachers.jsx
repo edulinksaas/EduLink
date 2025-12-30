@@ -3,9 +3,10 @@ import { teacherService } from '../services/teacherService';
 import { academyService } from '../services/academyService';
 import { subjectService } from '../services/subjectService';
 import { useAcademy } from '../contexts/AcademyContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Modal from '../components/Modal';
 import Form from '../components/Form';
+import RegisterModal from '../components/RegisterModal';
 import './Teachers.css';
 
 
@@ -17,6 +18,7 @@ const isValidUUID = (str) => {
 
 const Teachers = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { academy, loadAcademy } = useAcademy();
   const [teachers, setTeachers] = useState([]);
   const [academies, setAcademies] = useState([]);
@@ -25,6 +27,7 @@ const Teachers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [selectedWorkDays, setSelectedWorkDays] = useState([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
@@ -75,6 +78,50 @@ const Teachers = () => {
   useEffect(() => {
     loadStatistics();
   }, [teachers]);
+
+  // URL 쿼리 파라미터 확인하여 선생님 등록 모달 열기
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const action = searchParams.get('action');
+    if (action === 'register') {
+      // 쿼리 파라미터 제거
+      navigate('/teachers', { replace: true });
+      // 모달 열기 (handleCreate 로직 실행)
+      const openModal = async () => {
+        try {
+          // 먼저 Context에서 학원 정보 확인
+          if (academy && academy.id) {
+            setAcademies([academy]);
+            if (!selectedAcademy || selectedAcademy !== academy.id) {
+              setSelectedAcademy(academy.id);
+            }
+          } else {
+            await loadAcademy();
+            await loadAcademies();
+            if (academy && academy.id) {
+              setAcademies([academy]);
+              setSelectedAcademy(academy.id);
+            } else {
+              alert('학원이 등록되지 않았습니다. 설정 페이지에서 먼저 학원을 등록해주세요.');
+              navigate('/settings');
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('학원 정보 로드 실패:', error);
+          alert('학원 정보를 불러올 수 없습니다. 설정 페이지에서 학원을 확인해주세요.');
+          navigate('/settings');
+          return;
+        }
+        
+        setEditingTeacher(null);
+        setSelectedWorkDays([]);
+        setSelectedSubjectIds([]);
+        setIsModalOpen(true);
+      };
+      openModal();
+    }
+  }, [location.search, navigate, academy, selectedAcademy, loadAcademy]);
 
   const loadAcademies = async () => {
     try {
@@ -247,6 +294,10 @@ const Teachers = () => {
     navigate('/classes');
   };
 
+  const handleRegister = () => {
+    setRegisterModalOpen(true);
+  };
+
   const handleEdit = (teacher) => {
     setEditingTeacher(teacher);
     // 편집 시 기존 데이터 설정
@@ -387,6 +438,10 @@ const Teachers = () => {
           <h1 className="page-title">전체 선생님 현황</h1>
           <p className="page-subtitle">모든 선생님 정보를 한 곳에서 관리하세요</p>
         </div>
+        <button className="register-button" onClick={handleRegister}>
+          <span className="register-icon">➕</span>
+          등록하기
+        </button>
       </div>
 
       <div className="summary-cards">
@@ -400,17 +455,6 @@ const Teachers = () => {
         </div>
       </div>
 
-      <div className="action-buttons">
-        <button className="btn-primary-action" onClick={handleCreate}>
-          <span className="btn-icon">+</span>
-          선생님 등록하기
-        </button>
-        <button className="btn-secondary-action" onClick={handleCreateClass}>
-          <span className="btn-icon">+</span>
-          수업 등록하기
-        </button>
-      </div>
-
       <div className="teacher-list-section">
         <div className="section-header">
           <h2 className="section-title">전체 선생님 목록</h2>
@@ -418,7 +462,7 @@ const Teachers = () => {
             <input
               type="text"
               className="search-input"
-              placeholder="Q 선생님 이름으로 검색..."
+              placeholder="Q 선생님명으로 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -429,93 +473,96 @@ const Teachers = () => {
           </div>
         </div>
 
-        <div className="content-area">
-          {loading ? (
-            <div className="loading">로딩 중...</div>
-          ) : teachers.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">👨‍🏫</div>
-              <div className="empty-message">등록된 선생님이 없습니다</div>
-              <div className="empty-submessage">선생님 등록하기 버튼을 눌러 선생님을 등록해주세요</div>
-            </div>
-          ) : (
-            <div className="teachers-list">
-              {teachers.map((teacher) => {
-                // 근무 요일 정렬 함수
-                const sortWorkDays = (days) => {
-                  const order = ['월', '화', '수', '목', '금', '토', '일'];
-                  return days.sort((a, b) => {
-                    const indexA = order.indexOf(a.trim());
-                    const indexB = order.indexOf(b.trim());
-                    return indexA - indexB;
-                  });
-                };
+        {loading ? (
+          <div className="loading">로딩 중...</div>
+        ) : teachers.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">👨‍🏫</div>
+            <div className="empty-message">등록된 선생님이 없습니다</div>
+            <div className="empty-submessage">등록하기 버튼을 눌러 선생님을 등록해주세요</div>
+          </div>
+        ) : (
+          <div className="teachers-list">
+            {teachers.map((teacher) => {
+              const teacherSubjects = teacher.subject_ids 
+                ? teacher.subject_ids.map(id => {
+                    const subject = subjects.find(s => s.id === id);
+                    return subject ? subject.name : null;
+                  }).filter(Boolean)
+                : [];
+              
+              // 근무 요일 정렬 함수
+              const sortWorkDays = (days) => {
+                const order = ['월', '화', '수', '목', '금', '토', '일'];
+                return days.sort((a, b) => {
+                  const indexA = order.indexOf(a.trim());
+                  const indexB = order.indexOf(b.trim());
+                  return indexA - indexB;
+                });
+              };
 
-                const workDays = teacher.work_days 
-                  ? sortWorkDays(teacher.work_days.split(',')) 
-                  : [];
-                const teacherSubjects = teacher.subject_ids 
-                  ? teacher.subject_ids.map(id => {
-                      const subject = subjects.find(s => s.id === id);
-                      return subject ? subject.name : '과목';
-                    })
-                  : [];
-                
-                return (
-                  <div 
-                    key={teacher.id} 
-                    className="teacher-item"
-                    onClick={(e) => {
-                      // 버튼 클릭이 아닌 경우에만 상세 페이지로 이동
-                      if (!e.target.closest('.teacher-item-actions')) {
-                        navigate(`/teachers/${teacher.id}`);
-                      }
-                    }}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className="teacher-item-name">{teacher.name}</div>
-                    <div className="teacher-item-info">
+              const workDays = teacher.work_days 
+                ? sortWorkDays(teacher.work_days.split(',')) 
+                : [];
+              
+              return (
+                <div 
+                  key={teacher.id} 
+                  className="teacher-item"
+                  onClick={(e) => {
+                    // 버튼 클릭이 아닌 경우에만 상세 페이지로 이동
+                    if (!e.target.closest('.teacher-item-actions')) {
+                      navigate(`/teachers/${teacher.id}`);
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="teacher-item-name">{teacher.name}</div>
+                  <div className="teacher-item-info">
+                    {workDays.length > 0 && (
                       <div className="work-days-badges">
                         {workDays.map((day, index) => (
                           <span key={index} className="day-badge">{day}</span>
                         ))}
                       </div>
+                    )}
+                    {teacherSubjects.length > 0 && (
                       <div className="subjects-badges">
                         {teacherSubjects.map((subject, index) => (
                           <span key={index} className="subject-badge">{subject}</span>
                         ))}
                       </div>
-                    </div>
-                    <div className="teacher-item-actions">
-                      <button 
-                        className="action-button edit-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(teacher);
-                        }}
-                        title="수정"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        className="action-button delete-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`${teacher.name} 선생님을 삭제하시겠습니까?`)) {
-                            handleDelete(teacher.id);
-                          }
-                        }}
-                        title="삭제"
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  <div className="teacher-item-actions">
+                    <button 
+                      className="action-button edit-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(teacher);
+                      }}
+                      title="수정"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      className="action-button delete-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`${teacher.name} 선생님을 삭제하시겠습니까?`)) {
+                          handleDelete(teacher.id);
+                        }
+                      }}
+                      title="삭제"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Modal
@@ -560,12 +607,6 @@ const Teachers = () => {
             </div>
           )}
           
-          {academies.length > 0 && !selectedAcademy && (
-            <div className="alert alert-info" style={{ marginBottom: '20px', padding: '12px', background: '#d1ecf1', border: '1px solid #bee5eb', borderRadius: '6px', color: '#0c5460' }}>
-              ℹ️ 학원을 선택해주세요.
-            </div>
-          )}
-
           <div className="form-group">
             <label htmlFor="name" className="form-label">
               강사 명 <span className="required">*</span>
@@ -581,29 +622,6 @@ const Teachers = () => {
               placeholder="강사 명을 입력하세요"
             />
           </div>
-
-          {academies.length > 1 && (
-            <div className="form-group">
-              <label htmlFor="academy_id" className="form-label">
-                학원 <span className="required">*</span>
-              </label>
-              <select
-                id="academy_id"
-                name="academy_id"
-                className="form-control"
-                value={selectedAcademy || ''}
-                onChange={(e) => setSelectedAcademy(e.target.value)}
-                required
-              >
-                <option value="">학원을 선택하세요</option>
-                {academies.map((academy) => (
-                  <option key={academy.id} value={academy.id}>
-                    {academy.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           <div className="form-group">
             <label className="form-label">
@@ -666,6 +684,12 @@ const Teachers = () => {
           </div>
         </form>
       </Modal>
+
+      {/* 등록 모달 */}
+      <RegisterModal
+        isOpen={registerModalOpen}
+        onClose={() => setRegisterModalOpen(false)}
+      />
     </div>
   );
 };

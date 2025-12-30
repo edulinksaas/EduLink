@@ -91,6 +91,57 @@ export class AttendanceRecord {
       throw error;
     }
   }
+
+  static async findById(id) {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned
+          return null;
+        }
+        throw error;
+      }
+
+      return data ? new AttendanceRecord(data) : null;
+    } catch (error) {
+      console.error('출석 기록 조회 실패:', error);
+      throw error;
+    }
+  }
+
+  async delete() {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return;
+    }
+
+    if (!this.id) {
+      throw new Error('Cannot delete record without id');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('attendance_records')
+        .delete()
+        .eq('id', this.id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('출석 기록 삭제 실패:', error);
+      throw error;
+    }
+  }
 }
 
 

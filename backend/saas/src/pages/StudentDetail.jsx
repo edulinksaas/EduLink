@@ -1287,28 +1287,6 @@ const StudentDetail = () => {
           overallAttendanceRate={overallAttendanceRate}
         />
 
-        {/* 수업 추가 버튼 */}
-        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => setIsEnrollmentModalOpen(true)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#3498db',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '0.9rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
-          >
-            + 수업 추가
-          </button>
-        </div>
-
         {/* 수업 카드들 (반복) */}
         {classInfos.length > 0 ? (
           <div className="class-cards-container">

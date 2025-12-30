@@ -8,7 +8,7 @@ export class AttendanceRecord {
     this.student_id = data.student_id;
     this.class_id = data.class_id;
     this.date = data.date; // YYYY-MM-DD
-    this.status = data.status; // 'present' | 'absent' | 'late' | 'sick'
+    this.status = data.status; // 'present' | 'absent' | 'late' | 'sick' | 'carryover'
     this.note = data.note || '';
     this.createdAt = data.created_at || data.createdAt || new Date();
     this.updatedAt = data.updated_at || data.updatedAt || new Date();
@@ -88,6 +88,50 @@ export class AttendanceRecord {
       return this;
     } catch (error) {
       console.error('출석 기록 저장 실패:', error);
+      throw error;
+    }
+  }
+
+  static async findById(id) {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      return data ? new AttendanceRecord(data) : null;
+    } catch (error) {
+      console.error('출석 기록 조회 실패:', error);
+      return null;
+    }
+  }
+
+  async delete() {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return;
+    }
+
+    if (!this.id) {
+      throw new Error('출석 기록 ID가 없습니다.');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('attendance_records')
+        .delete()
+        .eq('id', this.id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('출석 기록 삭제 실패:', error);
       throw error;
     }
   }

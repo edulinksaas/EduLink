@@ -38,6 +38,7 @@ const TeacherDetail = () => {
   const [editingClass, setEditingClass] = useState(null);
   const [selectedDay, setSelectedDay] = useState('월');
   const [allowedDaysForModal, setAllowedDaysForModal] = useState(['월', '화', '수', '목', '금', '토', '일']); // 모달에서 선택 가능한 요일
+  const [selectedTimetableType, setSelectedTimetableType] = useState('weekday'); // 'weekday' 또는 'weekend'
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [tuitionFees, setTuitionFees] = useState([]);
   const [studentFormData, setStudentFormData] = useState({
@@ -255,7 +256,12 @@ const TeacherDetail = () => {
           setTimeSlots(slots);
         }
       } catch (error) {
-        console.warn('시간표 설정 로드 실패:', error);
+        // 429 에러 등 rate limit 에러는 재시도하지 않음
+        if (error?.response?.status === 429) {
+          console.warn('⚠️ API 요청 제한 초과, 기본값 사용');
+        } else {
+          console.warn('시간표 설정 로드 실패:', error);
+        }
         const slots = generateTimeSlotsFromSettings('오전 09:00', '오후 10:00');
         setTimeSlots(slots);
       }
@@ -618,9 +624,11 @@ const TeacherDetail = () => {
     setFormData(newData);
   };
 
-  // 특정 시간대와 강의실의 수업 찾기 (시작 시간이 해당 슬롯에 속하는 수업만 반환)
-  const getClassesForSlot = (timeSlot, classroomId, selectedDay) => {
-    if (!timeSlot || !classroomId) return [];
+  // 특정 시간대와 요일의 수업 찾기 (요일을 열로 표시)
+  const getClassesForSlot = (timeSlot, day, selectedDays) => {
+    if (!timeSlot || !day || !selectedDays || !selectedDays.includes(day)) {
+      return [];
+    }
     
     const slotStartMinutes = parseHHMMToMinutes(String(timeSlot));
     const slotEndMinutes = slotStartMinutes != null ? slotStartMinutes + 60 : null;
@@ -629,7 +637,7 @@ const TeacherDetail = () => {
     
     return classes.filter(cls => {
       // 요일 매칭
-      if (cls.schedule && cls.schedule !== selectedDay) return false;
+      if (cls.schedule && cls.schedule !== day) return false;
       
       if (!cls.start_time || !cls.end_time) return false;
       
@@ -642,17 +650,16 @@ const TeacherDetail = () => {
       const startsInSlot = clsStart >= slotStartMinutes && clsStart < slotEndMinutes;
       if (!startsInSlot) return false;
       
-      // 강의실 매칭
-      return String(cls.classroom_id || '') === String(classroomId || '');
+      return true;
     });
   };
 
-  // 시간표 렌더링 함수
-  const renderTimetable = (days) => {
-    if (days.length === 0) return null;
+  // 시간표 렌더링 함수 (요일을 열로, 시간을 행으로 표시)
+  const renderTimetable = (selectedDays) => {
+    if (!selectedDays || selectedDays.length === 0) return null;
 
     // 해당 요일들의 시간 범위 계산
-    const dayTimeRanges = days
+    const dayTimeRanges = selectedDays
       .map(day => {
         const daySetting = timetableSettings?.dayTimeSettings?.[day];
         if (!daySetting) return null;
@@ -685,7 +692,7 @@ const TeacherDetail = () => {
           <thead>
             <tr>
               <th className="time-column">시간</th>
-              {days.map((day) => (
+              {selectedDays.map((day) => (
                 <th key={day} className="classroom-column">
                   {day}
                 </th>
@@ -698,13 +705,19 @@ const TeacherDetail = () => {
               return (
                 <tr key={timeSlot}>
                   <td className="time-cell">{timeSlot}</td>
-                  {days.map((day) => {
+                  {selectedDays.map((day) => {
                     // 해당 요일의 수업 찾기 (모든 강의실에서 검색)
                     let classItems = [];
                     for (const classroom of classrooms) {
-                      const found = getClassesForSlot(timeSlot, classroom.id, day);
+                      const found = getClassesForSlot(timeSlot, day, selectedDays);
                       if (found && found.length > 0) {
-                        classItems.push(...found);
+                        // 해당 강의실의 수업만 필터링
+                        const classroomClasses = found.filter(cls => 
+                          String(cls.classroom_id || '') === String(classroom.id || '')
+                        );
+                        if (classroomClasses.length > 0) {
+                          classItems.push(...classroomClasses);
+                        }
                       }
                     }
                     
@@ -759,51 +772,51 @@ const TeacherDetail = () => {
                             <div
                               key={classItem.id}
                               className="class-item"
-                            style={{
-                              ...itemStyle,
-                              backgroundColor: backgroundColor,
-                              borderColor: borderColor,
-                              color: textColor
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = getHoverColor(subjectColor);
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = backgroundColor;
-                            }}
-                            onClick={() => handleOpenStudentList(classItem)}
-                          >
-                            <button
-                              type="button"
-                              className="class-item-edit"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(classItem);
+                              style={{
+                                ...itemStyle,
+                                backgroundColor: backgroundColor,
+                                borderColor: borderColor,
+                                color: textColor
                               }}
-                              title="수업 수정"
-                              aria-label="수업 수정"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = getHoverColor(subjectColor, 0.4);
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = backgroundColor;
+                              }}
+                              onClick={() => handleOpenStudentList(classItem)}
                             >
-                              ✏️
-                            </button>
-                            <button
-                              type="button"
-                              className="class-item-delete"
-                              onClick={(e) => handleDelete(classItem, e)}
-                              title="수업 삭제"
-                              aria-label="수업 삭제"
-                            >
-                              🗑️
-                            </button>
-                            <div className="class-item-name">{classItem.name}</div>
-                            {classroom && (
-                              <div className="class-item-teacher">
-                                {classroom.name}
+                              <button
+                                type="button"
+                                className="class-item-edit"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEdit(classItem);
+                                }}
+                                title="수업 수정"
+                                aria-label="수업 수정"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                className="class-item-delete"
+                                onClick={(e) => handleDelete(classItem, e)}
+                                title="수업 삭제"
+                                aria-label="수업 삭제"
+                              >
+                                🗑️
+                              </button>
+                              <div className="class-item-name">{classItem.name}</div>
+                              {classroom && (
+                                <div className="class-item-teacher">
+                                  {classroom.name}
+                                </div>
+                              )}
+                              <div className="class-item-students">
+                                학생: {studentCount}{maxStudents > 0 ? `/${maxStudents}` : ''}명
                               </div>
-                            )}
-                            <div className="class-item-students">
-                              학생: {studentCount}{maxStudents > 0 ? `/${maxStudents}` : ''}명
                             </div>
-                          </div>
                           ) : null;
                         })}
                       </td>
@@ -862,17 +875,24 @@ const TeacherDetail = () => {
 
       {/* 통계 카드 섹션 */}
       <div className="summary-cards">
-        <div className="summary-card">
+        {/* <div className="summary-card">
           <div className="summary-card-title">월 매출</div>
           <div className="summary-card-value">₩{teacherStats.monthlySales.toLocaleString()}</div>
-        </div>
+        </div> */}
         <div className="summary-card">
           <div className="summary-card-title">월 신규등록</div>
           <div className="summary-card-value">{teacherStats.monthlyRegistrations}명</div>
         </div>
-        <div className="summary-card">
-          <div className="summary-card-title">해당 월 인원 수</div>
-          <div className="summary-card-value">{teacherStats.monthlyStudents}명</div>
+        <div 
+          className="summary-card" 
+          onClick={() => navigate(`/students?teacher_id=${id}`)}
+          style={{ cursor: 'pointer' }}
+        >
+          <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '8px', textAlign: 'center' }}>담당 학생 페이지로 가기</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <div className="summary-card-title" style={{ margin: 0 }}>담당 학생 수</div>
+            <div className="summary-card-value" style={{ margin: 0 }}>{students.length}명</div>
+          </div>
         </div>
       </div>
 
@@ -912,109 +932,48 @@ const TeacherDetail = () => {
 
       {/* 선생님 시간표 섹션 */}
       {workDays.length > 0 && (
-        <>
-          {/* 평일 시간표 */}
-          {teacherWeekdays.length > 0 && (
-            <section className="teacher-section">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #e0e0e0' }}>
-                <h2 className="section-title" style={{ margin: 0 }}>평일 시간표</h2>
-                <button
-                  className="register-class-button"
-                  onClick={() => {
-                    setEditingClass(null);
+        <section className="teacher-section">
+          <div className="page-header-section">
+            <h2 className="section-title" style={{ margin: 0 }}>시간표</h2>
+            <div className="header-actions">
+              <div className="day-buttons">
+                {teacherWeekdays.length > 0 && (
+                  <button
+                    className={`day-button ${selectedTimetableType === 'weekday' ? 'active' : ''}`}
+                    onClick={() => setSelectedTimetableType('weekday')}
+                  >
+                    평일
+                  </button>
+                )}
+                {teacherWeekends.length > 0 && (
+                  <button
+                    className={`day-button ${selectedTimetableType === 'weekend' ? 'active' : ''}`}
+                    onClick={() => setSelectedTimetableType('weekend')}
+                  >
+                    주말
+                  </button>
+                )}
+              </div>
+              <button
+                className="add-class-header-button"
+                onClick={() => {
+                  setEditingClass(null);
+                  if (selectedTimetableType === 'weekday') {
                     setAllowedDaysForModal(['월', '화', '수', '목', '금']); // 평일만 선택 가능
-                    setIsClassModalOpen(true);
-                  }}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#3498db',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                  }}
-                  onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
-                  onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
-                >
-                  수업 등록하기
-                </button>
-              </div>
-              {renderTimetable(teacherWeekdays)}
-            </section>
-          )}
-
-          {/* 주말 시간표 */}
-          {teacherWeekends.length > 0 && (
-            <section className="teacher-section">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #e0e0e0' }}>
-                <h2 className="section-title" style={{ margin: 0 }}>주말 시간표</h2>
-                <button
-                  className="register-class-button"
-                  onClick={() => {
-                    setEditingClass(null);
+                  } else {
                     setAllowedDaysForModal(['토', '일']); // 주말만 선택 가능
-                    setIsClassModalOpen(true);
-                  }}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#3498db',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                  }}
-                  onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
-                  onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
-                >
-                  수업 등록하기
-                </button>
-              </div>
-              {renderTimetable(teacherWeekends)}
-            </section>
-          )}
-        </>
-      )}
-
-      {/* 담당 학생 섹션 */}
-      <section className="teacher-section">
-        <h2 className="section-title">담당 학생 ({students.length}명)</h2>
-        {students.length === 0 ? (
-          <div className="empty-state">담당 학생이 없습니다.</div>
-        ) : (
-          <div className="students-list">
-            {students.map((student) => (
-              <div 
-                key={student.id} 
-                className="student-card"
-                onClick={() => navigate(`/students/${student.id}`)}
-                style={{ cursor: 'pointer' }}
+                  }
+                  setIsClassModalOpen(true);
+                }}
               >
-                <div className="student-card-header">
-                  <h3 className="student-name">{student.name}</h3>
-                </div>
-                {student.parent_contact && (
-                  <div className="student-info-item">
-                    <span className="info-label">학부모 연락처:</span>
-                    <span className="info-value">{student.parent_contact}</span>
-                  </div>
-                )}
-                {student.note && (
-                  <div className="student-info-item">
-                    <span className="info-label">비고:</span>
-                    <span className="info-value">{student.note}</span>
-                  </div>
-                )}
-              </div>
-            ))}
+                + 수업 추가
+              </button>
+            </div>
           </div>
-        )}
-      </section>
+          {selectedTimetableType === 'weekday' && teacherWeekdays.length > 0 && renderTimetable(teacherWeekdays)}
+          {selectedTimetableType === 'weekend' && teacherWeekends.length > 0 && renderTimetable(teacherWeekends)}
+        </section>
+      )}
 
       {/* 학생 리스트 모달 */}
       <Modal

@@ -120,7 +120,7 @@ const startServer = async () => {
     console.log('   ✅ CORS 설정 적용');
     console.log('   ✅ Rate Limiting 적용');
     console.log('   ✅ 입력 검증 미들웨어 준비 완료');
-    if (envCheck.warnings && envCheck.warnings.length > 0) {
+    if (envCheck.warnings.length > 0) {
       console.log('   ⚠️  환경 변수 경고 있음 (위 로그 확인)');
     }
     console.log('');
@@ -131,8 +131,8 @@ const startServer = async () => {
       
       if (!supabase) {
         console.warn('⚠️  경고: Supabase 클라이언트가 초기화되지 않았습니다.');
-        console.warn('   backend/.env 파일에 Supabase 설정을 추가해주세요.');
-        console.warn('   자세한 내용은 backend/README_ENV.md 파일을 참고하세요.\n');
+        console.warn('   server/.env 파일에 Supabase 설정을 추가해주세요.');
+        console.warn('   자세한 내용은 server/README_ENV.md 파일을 참고하세요.\n');
       } else {
         console.log('🔍 Supabase 연결 테스트 중...');
         try {
@@ -151,7 +151,7 @@ const startServer = async () => {
     } catch (supabaseError) {
       console.warn('⚠️  Supabase 모듈 로드 중 에러:', supabaseError.message);
       console.warn('   에러 상세:', supabaseError.stack);
-      console.warn('   backend/.env 파일을 확인해주세요.\n');
+      console.warn('   server/.env 파일을 확인해주세요.\n');
     }
     
     // 서버 시작
@@ -197,7 +197,7 @@ const startServer = async () => {
     if (error.message.includes('Cannot find module')) {
       console.error('\n💡 해결 방법:');
       console.error('   npm install을 실행하여 패키지를 설치하세요.');
-      console.error('   cd backend');
+      console.error('   cd saas');
       console.error('   npm install');
     } else if (error.message.includes('ENOENT')) {
       console.error('\n💡 해결 방법:');
@@ -234,3 +234,4 @@ process.on('SIGINT', () => {
 });
 
 startServer();
+

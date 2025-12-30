@@ -1,14 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { AcademyProvider } from './contexts/AcademyContext';
-import { WelcomeGuideProvider } from './contexts/WelcomeGuideContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
-import Dashboard from './pages/Dashboard';
 import TodayStatus from './pages/TodayStatus';
 import Academies from './pages/Academies';
 import Subjects from './pages/Subjects';
@@ -28,8 +26,7 @@ function App() {
     <Router>
       <AuthProvider>
         <AcademyProvider>
-          <WelcomeGuideProvider>
-            <Routes>
+          <Routes>
             {/* 공개 라우트 */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -42,7 +39,7 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <Dashboard />
+                    <Classes />
                   </Layout>
                 </ProtectedRoute>
               }
@@ -171,7 +168,6 @@ function App() {
             {/* 기본 리다이렉트 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          </WelcomeGuideProvider>
         </AcademyProvider>
       </AuthProvider>
     </Router>

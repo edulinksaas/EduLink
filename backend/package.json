@@ -1,7 +1,7 @@
 {
-  "name": "edulink-backend",
+  "name": "saas-server",
   "version": "1.0.0",
-  "description": "EduLink Backend Server",
+  "description": "SaaS Backend Server",
   "main": "server.js",
   "type": "module",
   "scripts": {

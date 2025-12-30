@@ -65,7 +65,6 @@ import './StudentDetail.css';
 
 function StudentHeaderSection({
   student,
-  overallAttendanceRate,
 }) {
   const characterMap = {
     bear: '🐻',
@@ -95,14 +94,6 @@ function StudentHeaderSection({
             )}
           </div>
         </div>
-        {overallAttendanceRate !== null && (
-          <div className="student-attendance-rate">
-            <span className="attendance-rate-label">전체 출석률</span>
-            <span className="attendance-rate-value">
-              {overallAttendanceRate.toFixed(0)}%
-            </span>
-          </div>
-        )}
       </div>
     </section>
   );
@@ -410,24 +401,6 @@ function ClassCard({
           )}
         </div>
 
-        {/* 최근 출석 히스토리 미니뷰 (5칸) */}
-        {recentAttendance && recentAttendance.length > 0 && (
-          <div className="attendance-miniview">
-            <span className="attendance-miniview-label">최근 출석</span>
-            <div className="attendance-miniview-items">
-              {recentAttendance.slice(0, 5).map((record, idx) => (
-                <div
-                  key={idx}
-                  className={`attendance-miniview-item attendance-miniview-item--${record.status}`}
-                  title={`${record.date}: ${record.status === 'present' ? '출석' : record.status === 'absent' ? '결석' : record.status === 'late' ? '지각' : '병결'}`}
-                >
-                  {statusEmoji[record.status] || '○'}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* 결제 정보 */}
         {paymentInfo && (
           <div className="payment-info-section">
@@ -531,22 +504,180 @@ function AttendanceDetailModal({
   studentId, 
   enrollmentId, 
   classInfo,
-  month 
+  student,
+  academyId,
+  month: initialMonth 
 }) {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(() => initialMonth || new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [isAttendanceFormOpen, setIsAttendanceFormOpen] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [attendanceNote, setAttendanceNote] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen && studentId) {
-      loadAttendanceRecords();
-    }
-  }, [isOpen, studentId, enrollmentId, month]);
+    const loadAttendanceRecords = async () => {
+      if (!isOpen || !studentId) return;
+      
+      try {
+        setLoading(true);
+        const monthParam = `${currentMonth.getFullYear()}-${String(
+          currentMonth.getMonth() + 1,
+        ).padStart(2, '0')}`;
+        
+        const attendanceRes = await attendanceService.getByStudent(
+          studentId,
+          monthParam,
+        );
+        
+        let records = attendanceRes.data?.records || [];
+        
+        // enrollmentId가 있으면 해당 수업의 출석 기록만 필터링
+        if (enrollmentId) {
+          // TODO: enrollment별 출석 기록 필터링 로직 추가 필요
+          // 현재는 모든 출석 기록 표시
+        }
+        
+        setAttendanceRecords(records);
+      } catch (e) {
+        console.warn('출석 기록 조회 실패:', e);
+        setAttendanceRecords([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const loadAttendanceRecords = async () => {
+    loadAttendanceRecords();
+  }, [isOpen, studentId, enrollmentId, currentMonth]);
+
+  // 출석 변경 감지 및 자동 새로고침
+  useEffect(() => {
+    if (!isOpen || !studentId) return;
+
+    const handleStorageChange = (e) => {
+      if (e.key === 'studentAttendanceUpdate' && e.newValue) {
+        try {
+          const updateData = JSON.parse(e.newValue);
+          if (updateData.studentId === studentId) {
+            // 출석 기록 다시 로드
+            const loadAttendanceRecords = async () => {
+              try {
+                const monthParam = `${currentMonth.getFullYear()}-${String(
+                  currentMonth.getMonth() + 1,
+                ).padStart(2, '0')}`;
+                
+                const attendanceRes = await attendanceService.getByStudent(
+                  studentId,
+                  monthParam,
+                );
+                
+                let records = attendanceRes.data?.records || [];
+                setAttendanceRecords(records);
+              } catch (e) {
+                console.warn('출석 기록 새로고침 실패:', e);
+              }
+            };
+            loadAttendanceRecords();
+          }
+        } catch (err) {
+          console.error('출석 업데이트 데이터 파싱 실패:', err);
+        }
+      }
+    };
+
+    // storage 이벤트 리스너 등록 (다른 탭/창에서의 변경 감지)
+    window.addEventListener('storage', handleStorageChange);
+
+    // 같은 페이지에서의 변경 감지 (polling 방식)
+    const interval = setInterval(() => {
+      const updateData = localStorage.getItem('studentAttendanceUpdate');
+      if (updateData) {
+        try {
+          const data = JSON.parse(updateData);
+          if (data.studentId === studentId) {
+            const lastUpdate = parseInt(data.timestamp);
+            const now = Date.now();
+            // 1초 이내의 변경만 처리 (너무 자주 새로고침 방지)
+            if (now - lastUpdate < 1000) {
+              const loadAttendanceRecords = async () => {
+                try {
+                  const monthParam = `${currentMonth.getFullYear()}-${String(
+                    currentMonth.getMonth() + 1,
+                  ).padStart(2, '0')}`;
+                  
+                  const attendanceRes = await attendanceService.getByStudent(
+                    studentId,
+                    monthParam,
+                  );
+                  
+                  let records = attendanceRes.data?.records || [];
+                  setAttendanceRecords(records);
+                } catch (e) {
+                  console.warn('출석 기록 새로고침 실패:', e);
+                }
+              };
+              loadAttendanceRecords();
+            }
+          }
+        } catch (err) {
+          console.error('출석 업데이트 데이터 파싱 실패:', err);
+        }
+      }
+    }, 500); // 0.5초마다 확인
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [isOpen, studentId, currentMonth]);
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCurrentMonth(new Date());
+  };
+
+  const handleDateClick = (date, inCurrentMonth) => {
+    if (!inCurrentMonth) return;
+    const dateStr = date.toISOString().slice(0, 10);
+    
+    setSelectedDate(dateStr);
+    setSelectedStatus('');
+    setAttendanceNote('');
+    setIsAttendanceFormOpen(true);
+  };
+
+  const handleSaveAttendance = async () => {
+    if (!selectedStatus || !selectedDate || !academyId || !studentId) {
+      alert('필수 정보가 누락되었습니다.');
+      return;
+    }
+
     try {
-      setLoading(true);
-      const monthParam = `${month.getFullYear()}-${String(
-        month.getMonth() + 1,
+      setSaving(true);
+      const dateStr = selectedDate;
+
+      // 새 기록 생성 (항상 추가)
+      await attendanceService.create({
+        academyId,
+        studentId,
+        classId: classInfo?.classId || null,
+        date: dateStr,
+        status: selectedStatus,
+        note: attendanceNote,
+      });
+
+      // 출석 기록 다시 로드
+      const monthParam = `${currentMonth.getFullYear()}-${String(
+        currentMonth.getMonth() + 1,
       ).padStart(2, '0')}`;
       
       const attendanceRes = await attendanceService.getByStudent(
@@ -555,27 +686,53 @@ function AttendanceDetailModal({
       );
       
       let records = attendanceRes.data?.records || [];
-      
-      // enrollmentId가 있으면 해당 수업의 출석 기록만 필터링
-      if (enrollmentId) {
-        // TODO: enrollment별 출석 기록 필터링 로직 추가 필요
-        // 현재는 모든 출석 기록 표시
-      }
-      
       setAttendanceRecords(records);
-    } catch (e) {
-      console.warn('출석 기록 조회 실패:', e);
-      setAttendanceRecords([]);
+
+      // 폼 초기화
+      setSelectedStatus('');
+      setAttendanceNote('');
+    } catch (error) {
+      console.error('출석 등록 실패:', error);
+      alert('출석 등록에 실패했습니다.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  if (!isOpen) return null;
+  const handleDeleteAttendance = async (recordId) => {
+    if (!recordId) return;
+
+    if (!confirm('정말 이 출석 기록을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await attendanceService.delete(recordId);
+
+      // 출석 기록 다시 로드
+      const monthParam = `${currentMonth.getFullYear()}-${String(
+        currentMonth.getMonth() + 1,
+      ).padStart(2, '0')}`;
+      
+      const attendanceRes = await attendanceService.getByStudent(
+        studentId,
+        monthParam,
+      );
+      
+      let records = attendanceRes.data?.records || [];
+      setAttendanceRecords(records);
+    } catch (error) {
+      console.error('출석 삭제 실패:', error);
+      alert('출석 삭제에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const calendarDays = useMemo(() => {
-    const year = month.getFullYear();
-    const m = month.getMonth();
+    const year = currentMonth.getFullYear();
+    const m = currentMonth.getMonth();
 
     const firstDay = new Date(year, m, 1);
     const firstWeekDay = firstDay.getDay();
@@ -601,31 +758,68 @@ function AttendanceDetailModal({
     }
 
     return days;
-  }, [month]);
+  }, [currentMonth]);
 
   const recordMap = useMemo(() => {
     const map = {};
     attendanceRecords.forEach((r) => {
-      map[r.date] = r.status;
+      if (!map[r.date]) {
+        map[r.date] = [];
+      }
+      map[r.date].push({
+        status: r.status,
+        id: r.id,
+        note: r.note,
+      });
     });
     return map;
   }, [attendanceRecords]);
 
+  // 출석 통계 계산
+  const attendanceStats = useMemo(() => {
+    const stats = {
+      present: 0,
+      absent: 0,
+      late: 0,
+      earlyLeave: 0,
+      sick: 0,
+      official: 0,
+    };
+
+    attendanceRecords.forEach((record) => {
+      if (record.status === 'present') stats.present++;
+      else if (record.status === 'absent') stats.absent++;
+      else if (record.status === 'late') stats.late++;
+      else if (record.status === 'earlyLeave') stats.earlyLeave++;
+      else if (record.status === 'sick') stats.sick++;
+      else if (record.status === 'official') stats.official++;
+    });
+
+    return stats;
+  }, [attendanceRecords]);
+
+  if (!isOpen) return null;
+
   const statusEmoji = {
     present: '😊',
-    absent: '😢',
+    absent: '❌',
     late: '⏰',
+    earlyLeave: '🏃',
     sick: '🤒',
+    official: '📄',
   };
 
-  const monthLabel = `${month.getFullYear()}년 ${month.getMonth() + 1}월`;
+  const monthLabel = `${currentMonth.getFullYear()}년 ${currentMonth.getMonth() + 1}월`;
+  const isCurrentMonth = 
+    currentMonth.getFullYear() === new Date().getFullYear() &&
+    currentMonth.getMonth() === new Date().getMonth();
 
   return (
     <div className="attendance-detail-modal-backdrop" onClick={onClose}>
       <div className="attendance-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="attendance-detail-modal-header">
           <h2 className="attendance-detail-modal-title">
-            {classInfo?.course || '출석 상세'}
+            {student?.name || '학생'} {classInfo?.course ? `· ${classInfo.course}` : ''}
           </h2>
           <button
             type="button"
@@ -641,49 +835,302 @@ function AttendanceDetailModal({
             <div className="loading">출석 기록을 불러오는 중...</div>
           ) : (
             <>
-              <div className="attendance-calendar-header">
+              {/* 월 네비게이션 */}
+              <div className="attendance-calendar-navigation">
+                <button
+                  type="button"
+                  onClick={goToPreviousMonth}
+                  className="calendar-nav-button"
+                >
+                  ←
+                </button>
                 <span className="calendar-month-label">{monthLabel}</span>
+                <button
+                  type="button"
+                  onClick={goToToday}
+                  className="calendar-today-button"
+                  disabled={isCurrentMonth}
+                >
+                  오늘
+                </button>
+                <button
+                  type="button"
+                  onClick={goToNextMonth}
+                  className="calendar-nav-button"
+                >
+                  →
+                </button>
+              </div>
+
+              {/* 출석 통계 */}
+              <div className="attendance-stats-row">
+                <div className="attendance-stat-item">
+                  <span className="attendance-stat-label">출석</span>
+                  <span className="attendance-stat-value">{attendanceStats.present}</span>
+                </div>
+                <div className="attendance-stat-item">
+                  <span className="attendance-stat-label">결석</span>
+                  <span className="attendance-stat-value">{attendanceStats.absent}</span>
+                </div>
+                <div className="attendance-stat-item">
+                  <span className="attendance-stat-label">지각</span>
+                  <span className="attendance-stat-value">{attendanceStats.late}</span>
+                </div>
+                <div className="attendance-stat-item">
+                  <span className="attendance-stat-label">조퇴</span>
+                  <span className="attendance-stat-value">{attendanceStats.earlyLeave}</span>
+                </div>
+                <div className="attendance-stat-item">
+                  <span className="attendance-stat-label">병결</span>
+                  <span className="attendance-stat-value">{attendanceStats.sick}</span>
+                </div>
+                <div className="attendance-stat-item">
+                  <span className="attendance-stat-label">공결</span>
+                  <span className="attendance-stat-value">{attendanceStats.official}</span>
+                </div>
               </div>
               
+              {/* 요일 헤더 */}
               <div className="calendar-weekdays">
-                {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
-                  <div key={d} className="calendar-weekday">
+                {['일', '월', '화', '수', '목', '금', '토'].map((d, idx) => (
+                  <div 
+                    key={d} 
+                    className={`calendar-weekday ${idx === 0 ? 'calendar-weekday--sun' : idx === 6 ? 'calendar-weekday--sat' : ''}`}
+                  >
                     {d}
                   </div>
                 ))}
               </div>
 
+              {/* 캘린더 그리드 */}
               <div className="calendar-grid">
                 {calendarDays.map(({ date, inCurrentMonth }) => {
                   const key = date.toISOString().slice(0, 10);
-                  const status = recordMap[key];
+                  const records = recordMap[key] || [];
                   const isToday =
                     new Date().toDateString() === date.toDateString() && inCurrentMonth;
+                  const dayOfWeek = date.getDay();
+
+                  // 첫 번째 기록의 상태로 배경색 결정 (여러 개면 첫 번째 것)
+                  const firstStatus = records.length > 0 ? records[0].status : null;
 
                   const classes = ['calendar-day'];
                   if (!inCurrentMonth) classes.push('calendar-day--outside');
-                  if (status) classes.push(`calendar-day--${status}`);
+                  if (firstStatus) classes.push(`calendar-day--${firstStatus}`);
                   if (isToday) classes.push('calendar-day--today');
+                  if (dayOfWeek === 0 && inCurrentMonth) classes.push('calendar-day--sun');
+                  if (dayOfWeek === 6 && inCurrentMonth) classes.push('calendar-day--sat');
 
                   return (
                     <div
                       key={date.toISOString()}
                       className={classes.join(' ')}
+                      onClick={() => handleDateClick(date, inCurrentMonth)}
+                      style={{ cursor: inCurrentMonth ? 'pointer' : 'default' }}
                     >
                       <span className="calendar-day-number">{date.getDate()}</span>
-                      {status && (
-                        <span className="calendar-day-status">
-                          {statusEmoji[status]}
-                        </span>
+                      {records.length > 0 && (
+                        <div className="calendar-day-statuses">
+                          {records.map((record, idx) => (
+                            <span 
+                              key={record.id || idx} 
+                              className="calendar-day-status"
+                              title={record.note || statusEmoji[record.status]}
+                            >
+                              {statusEmoji[record.status] || '○'}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                   );
                 })}
               </div>
+
+              {/* 범례 */}
+              <div className="attendance-legend">
+                <div className="legend-item">
+                  <span className="legend-icon">😊</span>
+                  <span className="legend-label">출석</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-icon">❌</span>
+                  <span className="legend-label">결석</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-icon">🔄</span>
+                  <span className="legend-label">연장</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-icon">⏰</span>
+                  <span className="legend-label">지각</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-icon">🏃</span>
+                  <span className="legend-label">조퇴</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-icon">🤒</span>
+                  <span className="legend-label">병결</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-icon">📄</span>
+                  <span className="legend-label">공결</span>
+                </div>
+              </div>
             </>
           )}
         </div>
       </div>
+
+      {/* 출석 등록 모달 */}
+      {isAttendanceFormOpen && (
+        <div className="attendance-form-modal-backdrop" onClick={() => setIsAttendanceFormOpen(false)}>
+          <div className="attendance-form-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="attendance-form-modal-header">
+              <h3 className="attendance-form-modal-title">
+                출석 등록 - {selectedDate ? new Date(selectedDate).toLocaleDateString('ko-KR') : ''}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAttendanceFormOpen(false)}
+                className="attendance-form-modal-close"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="attendance-form-modal-body">
+              {/* 기존 출석 기록 리스트 */}
+              {selectedDate && recordMap[selectedDate] && recordMap[selectedDate].length > 0 && (
+                <div className="attendance-form-group">
+                  <label className="attendance-form-label">기존 출석 기록</label>
+                  <div className="attendance-records-list">
+                    {recordMap[selectedDate].map((record) => (
+                      <div key={record.id} className="attendance-record-item">
+                        <div className="attendance-record-content">
+                          <span className="attendance-record-emoji">
+                            {statusEmoji[record.status] || '○'}
+                          </span>
+                          <div className="attendance-record-info">
+                            <span className="attendance-record-status">
+                              {record.status === 'present' && '출석'}
+                              {record.status === 'absent' && '결석'}
+                              {record.status === 'late' && '지각'}
+                              {record.status === 'earlyLeave' && '조퇴'}
+                              {record.status === 'sick' && '병결'}
+                              {record.status === 'official' && '공결'}
+                            </span>
+                            {record.note && (
+                              <span className="attendance-record-note">{record.note}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="attendance-record-actions">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAttendance(record.id)}
+                            className="attendance-record-delete-button"
+                            disabled={saving}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 새 출석 기록 추가 */}
+              <div className="attendance-form-group">
+                <label className="attendance-form-label">
+                  새 출석 기록 추가
+                </label>
+                <div className="attendance-status-buttons">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus('present')}
+                    className={`attendance-status-button ${selectedStatus === 'present' ? 'active' : ''}`}
+                  >
+                    😊 출석
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus('absent')}
+                    className={`attendance-status-button ${selectedStatus === 'absent' ? 'active' : ''}`}
+                  >
+                    ❌ 결석
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus('late')}
+                    className={`attendance-status-button ${selectedStatus === 'late' ? 'active' : ''}`}
+                  >
+                    ⏰ 지각
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus('earlyLeave')}
+                    className={`attendance-status-button ${selectedStatus === 'earlyLeave' ? 'active' : ''}`}
+                  >
+                    🏃 조퇴
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus('sick')}
+                    className={`attendance-status-button ${selectedStatus === 'sick' ? 'active' : ''}`}
+                  >
+                    🤒 병결
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus('official')}
+                    className={`attendance-status-button ${selectedStatus === 'official' ? 'active' : ''}`}
+                  >
+                    📄 공결
+                  </button>
+                </div>
+              </div>
+
+              <div className="attendance-form-group">
+                <label className="attendance-form-label">메모</label>
+                <textarea
+                  className="attendance-form-textarea"
+                  value={attendanceNote}
+                  onChange={(e) => setAttendanceNote(e.target.value)}
+                  placeholder="메모를 입력하세요 (선택사항)"
+                  rows={3}
+                />
+              </div>
+
+              <div className="attendance-form-actions">
+                <div style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAttendanceFormOpen(false);
+                    setSelectedStatus('');
+                    setAttendanceNote('');
+                  }}
+                  className="attendance-form-button attendance-form-button--cancel"
+                  disabled={saving}
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAttendance}
+                  className="attendance-form-button attendance-form-button--save"
+                  disabled={!selectedStatus || saving}
+                >
+                  {saving ? '저장 중...' : '추가'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1240,18 +1687,6 @@ const StudentDetail = () => {
     console.log('캘린더 클릭:', date);
   };
 
-  // 전체 출석률 계산
-  const overallAttendanceRate = useMemo(() => {
-    if (!attendanceRecords.length) {
-      return null;
-    }
-    const total = attendanceRecords.length;
-    const presentCount = attendanceRecords.filter(
-      (r) => r.status === 'present',
-    ).length;
-    return (presentCount / total) * 100;
-  }, [attendanceRecords]);
-
   // 각 수업별 최근 출석 기록 가져오기
   const getRecentAttendanceForClass = (enrollmentId, classId) => {
     // enrollmentId나 classId로 필터링된 출석 기록 반환
@@ -1284,30 +1719,7 @@ const StudentDetail = () => {
         {/* 상단 학생 헤더 */}
         <StudentHeaderSection
           student={student}
-          overallAttendanceRate={overallAttendanceRate}
         />
-
-        {/* 수업 추가 버튼 */}
-        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => setIsEnrollmentModalOpen(true)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#3498db',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '0.9rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
-          >
-            + 수업 추가
-          </button>
-        </div>
 
         {/* 수업 카드들 (반복) */}
         {classInfos.length > 0 ? (
@@ -1360,6 +1772,8 @@ const StudentDetail = () => {
           studentId={student.id}
           enrollmentId={selectedEnrollmentId}
           classInfo={selectedClassInfo}
+          student={student}
+          academyId={academyId}
           month={calendarMonth}
         />
 

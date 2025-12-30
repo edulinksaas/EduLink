@@ -9,6 +9,7 @@ import { tuitionFeeService } from '../services/tuitionFeeService';
 import { parentService } from '../services/parentService';
 import { checkAndDeleteEmptyClass } from '../utils/classAutoDelete';
 import Modal from '../components/Modal';
+import RegisterModal from '../components/RegisterModal';
 import './Students.css';
 
 const Students = () => {
@@ -18,6 +19,7 @@ const Students = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [academies, setAcademies] = useState([]);
   const [selectedAcademy, setSelectedAcademy] = useState('');
@@ -29,8 +31,8 @@ const Students = () => {
   const [fees, setFees] = useState([]);
   
   // 학부모 조회 관련 상태
-  const [checkingParent, setCheckingParent] = useState(false);
-  const [parentCheckResult, setParentCheckResult] = useState(null);
+  // const [checkingParent, setCheckingParent] = useState(false);
+  // const [parentCheckResult, setParentCheckResult] = useState(null);
   
   // 폼 데이터 상태
   const [formData, setFormData] = useState({
@@ -68,6 +70,21 @@ const Students = () => {
       setSearchParams({});
     }
   }, [selectedAcademy, searchParams, setSearchParams, isModalOpen]);
+
+  // URL 파라미터로 선생님 필터링
+  useEffect(() => {
+    const teacherIdFromUrl = searchParams.get('teacher_id');
+    if (teacherIdFromUrl && teachers.length > 0) {
+      // URL에 teacher_id가 있고, 선생님 목록이 로드되었으면 필터링 설정
+      const teacherExists = teachers.find(t => t.id === teacherIdFromUrl);
+      if (teacherExists && formData.teacher_id !== teacherIdFromUrl) {
+        setFormData(prev => ({
+          ...prev,
+          teacher_id: teacherIdFromUrl
+        }));
+      }
+    }
+  }, [searchParams, teachers, formData.teacher_id]);
 
   // 학부모 연락처 자동 생성 함수
   const generateParentContact = () => {
@@ -270,15 +287,23 @@ const Students = () => {
     return sum + (Number.isNaN(feeValue) ? 0 : feeValue);
   }, 0);
 
-  // 검색 필터링된 학생 목록
+  // 검색 및 선생님 필터링된 학생 목록
   const filteredStudents = useMemo(() => {
+    let filtered = students;
+
+    // 선생님 필터링
+    if (formData.teacher_id) {
+      filtered = filtered.filter(student => student.teacher_id === formData.teacher_id);
+    }
+
+    // 검색어 필터링
     if (!searchQuery.trim()) {
-      return students;
+      return filtered;
     }
 
     const query = searchQuery.trim().toLowerCase();
 
-    return students.filter((student) => {
+    return filtered.filter((student) => {
       const classItem = classes.find((c) => c.id === student.class_id);
       const subjectItem = classItem ? subjects.find((s) => s.id === classItem.subject_id) : null;
       const teacherItem = teachers.find((t) => t.id === student.teacher_id);
@@ -296,7 +321,7 @@ const Students = () => {
           return true;
       }
     });
-  }, [students, classes, subjects, teachers, category, searchQuery]);
+  }, [students, classes, subjects, teachers, category, searchQuery, formData.teacher_id]);
 
   const handleSearch = () => {
     // 검색은 useMemo로 자동 필터링되므로 여기서는 페이지를 1로 리셋
@@ -356,19 +381,7 @@ const Students = () => {
   };
 
   const handleRegister = () => {
-    setEditingStudent(null);
-    setFormData({
-      name: '',
-      parent_contact: '',
-      payment_method: '현금',
-      class_id: '',
-      teacher_id: '',
-      schedule: '',
-      fee: '',
-      receipt_file: null,
-      note: '',
-    });
-    setIsModalOpen(true);
+    setRegisterModalOpen(true);
   };
 
   const handleInputChange = (e) => {
@@ -402,43 +415,43 @@ const Students = () => {
       }
       
       // 학부모 연락처가 변경되면 조회 결과 초기화
-      if (name === 'parent_contact') {
-        setParentCheckResult(null);
-      }
+      // if (name === 'parent_contact') {
+      //   setParentCheckResult(null);
+      // }
     }
   };
 
   // 학부모 연락처 조회 함수
-  const handleCheckParent = async () => {
-    const phone = formData.parent_contact.trim();
-    
-    if (!phone) {
-      alert('학부모 연락처를 입력해주세요.');
-      return;
-    }
+  // const handleCheckParent = async () => {
+  //   const phone = formData.parent_contact.trim();
+  //   
+  //   if (!phone) {
+  //     alert('학부모 연락처를 입력해주세요.');
+  //     return;
+  //   }
 
-    // 전화번호 형식 검증 (010-XXXX-XXXX 또는 숫자만)
-    const phoneNumber = phone.replace(/[^0-9]/g, '');
-    
-    if (phoneNumber.length < 10 || phoneNumber.length > 11 || !phoneNumber.startsWith('010')) {
-      alert('올바른 전화번호 형식이 아닙니다.\n010-XXXX-XXXX 형식으로 입력해주세요.');
-      return;
-    }
+  //   // 전화번호 형식 검증 (010-XXXX-XXXX 또는 숫자만)
+  //   const phoneNumber = phone.replace(/[^0-9]/g, '');
+  //   
+  //   if (phoneNumber.length < 10 || phoneNumber.length > 11 || !phoneNumber.startsWith('010')) {
+  //     alert('올바른 전화번호 형식이 아닙니다.\n010-XXXX-XXXX 형식으로 입력해주세요.');
+  //     return;
+  //   }
 
-    setCheckingParent(true);
-    setParentCheckResult(null);
+  //   setCheckingParent(true);
+  //   setParentCheckResult(null);
 
-    try {
-      const response = await parentService.checkRegistration(phoneNumber);
-      setParentCheckResult(response.data);
-    } catch (error) {
-      console.error('학부모 조회 실패:', error);
-      alert('학부모 조회 중 오류가 발생했습니다.');
-      setParentCheckResult({ registered: false, error: true });
-    } finally {
-      setCheckingParent(false);
-    }
-  };
+  //   try {
+  //     const response = await parentService.checkRegistration(phoneNumber);
+  //     setParentCheckResult(response.data);
+  //   } catch (error) {
+  //     console.error('학부모 조회 실패:', error);
+  //     alert('학부모 조회 중 오류가 발생했습니다.');
+  //     setParentCheckResult({ registered: false, error: true });
+  //   } finally {
+  //     setCheckingParent(false);
+  //   }
+  // };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -513,7 +526,7 @@ const Students = () => {
 
       setIsModalOpen(false);
       setEditingStudent(null);
-      setParentCheckResult(null);
+      // setParentCheckResult(null); // 주석 처리됨
       setFormData({
         name: '',
         parent_contact: '',
@@ -535,56 +548,103 @@ const Students = () => {
     }
   };
 
+  // 제목 결정: 선생님 필터링이 있으면 "선생님 이름 + 담당 학생", 없으면 "전체 학생"
+  const pageTitle = useMemo(() => {
+    if (formData.teacher_id) {
+      const selectedTeacher = teachers.find(t => t.id === formData.teacher_id);
+      if (selectedTeacher) {
+        return `${selectedTeacher.name} 담당 학생`;
+      }
+    }
+    return '전체 학생';
+  }, [formData.teacher_id, teachers]);
+
   return (
     <div className="students-page">
       <div className="page-header">
-        <h1 className="page-title">전체 학생</h1>
-        <div className="filter-section">
-          <div className="search-row">
-            <select 
-              className="category-select"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="학생명">학생명</option>
-              <option value="선생님명">선생님명</option>
-              <option value="과목명">과목명</option>
-              <option value="연락처">연락처</option>
-            </select>
-            <div className="search-box">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              />
-              <button className="search-button" onClick={handleSearch}>
-                <span className="search-icon">🔍</span>
-              </button>
+        <h1 className="page-title">{pageTitle}</h1>
+        {formData.teacher_id ? (
+          // 선생님 담당 학생 페이지: 검색 창만 가운데 배치
+          <div className="filter-section" style={{ justifyContent: 'center', width: '100%' }}>
+            <div className="search-row">
+              <select 
+                className="category-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="학생명">학생명</option>
+                <option value="선생님명">선생님명</option>
+                <option value="과목명">과목명</option>
+                <option value="연락처">연락처</option>
+              </select>
+              <div className="search-box">
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                />
+                <button className="search-button" onClick={handleSearch}>
+                  <span className="search-icon">🔍</span>
+                </button>
+              </div>
             </div>
           </div>
-          <button className="register-button" onClick={handleRegister}>
-            <span className="register-icon">➕</span>
-            학생 등록
-          </button>
-        </div>
+        ) : (
+          // 전체 학생 페이지: 기존 레이아웃 유지
+          <div className="filter-section">
+            <div className="search-row">
+              <select 
+                className="category-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="학생명">학생명</option>
+                <option value="선생님명">선생님명</option>
+                <option value="과목명">과목명</option>
+                <option value="연락처">연락처</option>
+              </select>
+              <div className="search-box">
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                />
+                <button className="search-button" onClick={handleSearch}>
+                  <span className="search-icon">🔍</span>
+                </button>
+              </div>
+            </div>
+            <button className="register-button" onClick={handleRegister}>
+              <span className="register-icon">➕</span>
+              등록하기
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="summary-cards">
-        <div className="summary-card">
+        {/* <div className="summary-card">
           <div className="summary-card-title">월 매출</div>
           <div className="summary-card-value">₩{monthlySales.toLocaleString()}</div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-card-title">월 신규등록</div>
-          <div className="summary-card-value">{monthlyRegistrations}명</div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-card-title">전체 학생 수</div>
-          <div className="summary-card-value">{totalStudents}명</div>
-        </div>
+        </div> */}
+        {!formData.teacher_id && (
+          <>
+            <div className="summary-card">
+              <div className="summary-card-title">월 신규등록</div>
+              <div className="summary-card-value">{monthlyRegistrations}명</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-card-title">전체 학생 수</div>
+              <div className="summary-card-value">{totalStudents}명</div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="content-area">
@@ -748,7 +808,7 @@ const Students = () => {
         onClose={() => {
           setIsModalOpen(false);
           setEditingStudent(null);
-          setParentCheckResult(null);
+          // setParentCheckResult(null); // 주석 처리됨
           setFormData({
             name: '',
             parent_contact: '',
@@ -787,20 +847,50 @@ const Students = () => {
                 <label className="form-label">
                   담당 선생님 <span className="required">*</span>
                 </label>
-                <select
-                  className="form-select"
-                  name="teacher_id"
-                  value={formData.teacher_id}
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="">선택하세요</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="button-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {teachers.map((teacher) => {
+                    const isSelected = formData.teacher_id === teacher.id;
+                    return (
+                      <button
+                        key={teacher.id}
+                        type="button"
+                        onClick={() => {
+                          handleInputChange({
+                            target: {
+                              name: 'teacher_id',
+                              value: teacher.id
+                            }
+                          });
+                        }}
+                        style={{
+                          padding: '10px 20px',
+                          border: `2px solid ${isSelected ? '#667eea' : '#e0e0e0'}`,
+                          borderRadius: '8px',
+                          background: isSelected ? '#667eea' : 'white',
+                          color: isSelected ? 'white' : '#2c3e50',
+                          cursor: 'pointer',
+                          fontSize: '0.95rem',
+                          fontWeight: isSelected ? '600' : '500',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) {
+                            e.target.style.borderColor = '#667eea';
+                            e.target.style.background = '#f0f0ff';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) {
+                            e.target.style.borderColor = '#e0e0e0';
+                            e.target.style.background = 'white';
+                          }
+                        }}
+                      >
+                        {teacher.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -812,23 +902,60 @@ const Students = () => {
                 <label className="form-label">
                   요일 <span className="required">*</span>
                 </label>
-                <select
-                  className="form-select"
-                  name="schedule"
-                  value={formData.schedule}
-                  onChange={handleInputChange}
-                  required
-                  disabled={!formData.teacher_id}
-                >
-                  <option value="">
-                    {formData.teacher_id ? '선택하세요' : '담당 선생님을 먼저 선택하세요'}
-                  </option>
-                  {availableDays.map((day) => (
-                    <option key={day} value={day}>
-                      {day}
-                    </option>
-                  ))}
-                </select>
+                <div className="button-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {availableDays.map((day) => {
+                    const isSelected = formData.schedule === day;
+                    const isDisabled = !formData.teacher_id;
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          if (!isDisabled) {
+                            handleInputChange({
+                              target: {
+                                name: 'schedule',
+                                value: day
+                              }
+                            });
+                          }
+                        }}
+                        disabled={isDisabled}
+                        style={{
+                          padding: '10px 20px',
+                          border: `2px solid ${isSelected ? '#667eea' : '#e0e0e0'}`,
+                          borderRadius: '8px',
+                          background: isSelected ? '#667eea' : 'white',
+                          color: isSelected ? 'white' : '#2c3e50',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          fontSize: '0.95rem',
+                          fontWeight: isSelected ? '600' : '500',
+                          transition: 'all 0.2s',
+                          opacity: isDisabled ? 0.5 : 1,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isDisabled && !isSelected) {
+                            e.target.style.borderColor = '#667eea';
+                            e.target.style.background = '#f0f0ff';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isDisabled && !isSelected) {
+                            e.target.style.borderColor = '#e0e0e0';
+                            e.target.style.background = 'white';
+                          }
+                        }}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!formData.teacher_id && (
+                  <div style={{ marginTop: '8px', fontSize: '0.875rem', color: '#999' }}>
+                    담당 선생님을 먼저 선택하세요
+                  </div>
+                )}
               </div>
             </div>
 
@@ -880,7 +1007,8 @@ const Students = () => {
                     required
                     style={{ flex: 1 }}
                   />
-                  <button
+                  {/* 조회 버튼 주석 처리 */}
+                  {/* <button
                     type="button"
                     onClick={handleCheckParent}
                     disabled={checkingParent || !formData.parent_contact.trim()}
@@ -897,9 +1025,10 @@ const Students = () => {
                     }}
                   >
                     {checkingParent ? '조회 중...' : '조회'}
-                  </button>
+                  </button> */}
                 </div>
-                {parentCheckResult && (
+                {/* 조회 결과 표시 주석 처리 */}
+                {/* {parentCheckResult && (
                   <div style={{ 
                     marginTop: '8px', 
                     padding: '8px 12px', 
@@ -925,7 +1054,7 @@ const Students = () => {
                       </div>
                     )}
                   </div>
-                )}
+                )} */}
               </div>
             </div>
 
@@ -1031,7 +1160,7 @@ const Students = () => {
               onClick={() => {
                 setIsModalOpen(false);
                 setEditingStudent(null);
-                setParentCheckResult(null);
+                // setParentCheckResult(null); // 주석 처리됨
                 setFormData({
                   name: '',
                   parent_contact: '',
@@ -1052,6 +1181,12 @@ const Students = () => {
           </div>
         </form>
       </Modal>
+
+      {/* 등록 모달 */}
+      <RegisterModal
+        isOpen={registerModalOpen}
+        onClose={() => setRegisterModalOpen(false)}
+      />
     </div>
   );
 };

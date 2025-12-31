@@ -9,13 +9,20 @@ export const getStudents = async (req, res, next) => {
   try {
     const { academy_id } = req.query;
     
+    console.log('📥 GET /api/students 요청');
+    console.log('   academy_id:', academy_id);
+    
     if (!academy_id) {
+      console.log('❌ academy_id가 없습니다.');
       return res.status(400).json({ error: 'academy_id is required' });
     }
     
     const students = await Student.findAll(academy_id);
+    console.log(`✅ 학생 목록 조회 성공: ${students.length}명`);
+    
     res.json({ students, total: students.length });
   } catch (error) {
+    console.error('❌ 학생 목록 조회 실패:', error);
     next(error);
   }
 };

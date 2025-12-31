@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAcademy } from '../contexts/AcademyContext';
 import { studentService } from '../services/studentService';
 import { academyService } from '../services/academyService';
 import { classService } from '../services/classService';
@@ -15,6 +16,7 @@ import './Students.css';
 const Students = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { academy, academyId, loading: academyLoading } = useAcademy();
   const [category, setCategory] = useState('학생명');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,9 +49,22 @@ const Students = () => {
     note: '',
   });
 
+  // AcademyContext의 academy 정보를 사용하여 selectedAcademy 설정
   useEffect(() => {
-    loadAcademies();
-  }, []);
+    if (academy && academy.id) {
+      console.log('✅ AcademyContext에서 학원 정보 로드:', {
+        id: academy.id,
+        name: academy.name,
+        code: academy.code
+      });
+      setAcademies([academy]);
+      setSelectedAcademy(academy.id);
+    } else if (!academyLoading) {
+      // AcademyContext에 없으면 API로 로드 (폴백)
+      console.log('⚠️ AcademyContext에 학원 정보가 없어 API로 로드 시도');
+      loadAcademies();
+    }
+  }, [academy, academyLoading]);
 
   useEffect(() => {
     if (selectedAcademy) {
@@ -105,10 +120,37 @@ const Students = () => {
 
   const loadAcademies = async () => {
     try {
+      // 로그인한 사용자의 학원 정보를 우선 사용
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const userData = JSON.parse(storedUser);
+          if (userData.academy_id) {
+            console.log('✅ 로그인한 사용자의 학원 ID 사용:', userData.academy_id);
+            setSelectedAcademy(userData.academy_id);
+            // 학원 정보도 가져오기
+            try {
+              const response = await academyService.getById(userData.academy_id);
+              const academyData = response.data.academy;
+              if (academyData) {
+                setAcademies([academyData]);
+                return;
+              }
+            } catch (apiError) {
+              console.warn('학원 정보 API 로드 실패:', apiError);
+            }
+          }
+        } catch (e) {
+          console.error('사용자 정보 파싱 실패:', e);
+        }
+      }
+      
+      // 폴백: 모든 학원 목록에서 첫 번째 선택
       const response = await academyService.getAll();
       const academiesList = response.data.academies || [];
       setAcademies(academiesList);
       if (academiesList.length > 0) {
+        console.log('⚠️ 첫 번째 학원 자동 선택:', academiesList[0].id);
         setSelectedAcademy(academiesList[0].id);
       }
     } catch (error) {
@@ -152,8 +194,14 @@ const Students = () => {
   const loadStudents = async () => {
     if (!selectedAcademy) return;
     try {
+      console.log('📤 학생 목록 로드 시작, academy_id:', selectedAcademy);
       const response = await studentService.getAll(selectedAcademy);
-      setStudents(response.data.students || []);
+      console.log('📥 학생 목록 응답:', response);
+      console.log('   response.data:', response.data);
+      console.log('   response.data.students:', response.data?.students);
+      const studentsList = response.data?.students || response.data || [];
+      console.log('   최종 학생 목록:', studentsList.length, '명');
+      setStudents(studentsList);
     } catch (error) {
       console.error('학생 목록 로드 실패:', error);
       setStudents([]);

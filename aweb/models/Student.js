@@ -23,6 +23,8 @@ export class Student {
     }
     
     try {
+      console.log('🔍 Student.findAll 호출, academyId:', academyId, '타입:', typeof academyId);
+      
       let query = supabase
         .from('students')
         .select('*')
@@ -30,10 +32,26 @@ export class Student {
       
       if (academyId) {
         query = query.eq('academy_id', academyId);
+        console.log('   academy_id 필터 적용:', academyId);
+      } else {
+        console.log('   academy_id 필터 없음 - 전체 조회');
       }
       
       const { data, error } = await query;
-      if (error) throw error;
+      
+      if (error) {
+        console.error('❌ Supabase 쿼리 에러:', error);
+        throw error;
+      }
+      
+      console.log(`✅ 학생 데이터 조회 성공: ${data?.length || 0}명`);
+      if (data && data.length > 0) {
+        console.log('   첫 번째 학생 샘플:', {
+          id: data[0].id,
+          name: data[0].name,
+          academy_id: data[0].academy_id
+        });
+      }
       
       return (data || []).map(item => new Student(item));
     } catch (error) {

@@ -8,6 +8,7 @@ import { timetableSettingsService } from '../services/timetableSettingsService';
 import { studentService } from '../services/studentService';
 import { tuitionFeeService } from '../services/tuitionFeeService';
 import { attendanceService } from '../services/attendanceService';
+import { enrollmentService } from '../services/enrollmentService';
 import { checkAndDeleteEmptyClass } from '../utils/classAutoDelete';
 import { useAcademy } from '../contexts/AcademyContext';
 import Modal from '../components/Modal';
@@ -907,9 +908,30 @@ const Classes = () => {
         (student) => student.class_id === classItem.id
       );
 
-      console.log('✅ 해당 수업 수강 학생 수:', classStudents.length);
+      // enrollment 정보 가져오기
+      try {
+        const enrollmentResponse = await enrollmentService.getAll(classItem.id);
+        const enrollments = enrollmentResponse.data?.enrollments || enrollmentResponse.data || [];
+        
+        // 각 학생에 enrollment_id 매핑
+        const studentsWithEnrollment = classStudents.map(student => {
+          const enrollment = enrollments.find(
+            (enr) => enr.student_id === student.id && enr.class_id === classItem.id
+          );
+          return {
+            ...student,
+            enrollment_id: enrollment?.id || null,
+          };
+        });
 
-      setEnrolledStudents(classStudents);
+        console.log('✅ 해당 수업 수강 학생 수:', studentsWithEnrollment.length);
+        setEnrolledStudents(studentsWithEnrollment);
+      } catch (enrollmentError) {
+        console.warn('⚠️ enrollment 정보 조회 실패, enrollment_id 없이 진행:', enrollmentError);
+        // enrollment 정보가 없어도 진행
+        setEnrolledStudents(classStudents);
+      }
+
       setIsStudentModalOpen(true);
     } catch (error) {
       console.error('❌ 수업별 학생 목록 조회 실패:', error);
@@ -2914,12 +2936,17 @@ const Classes = () => {
 
                             try {
                               const today = new Date();
-                              const dateStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+                              // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+                              const year = today.getFullYear();
+                              const month = String(today.getMonth() + 1).padStart(2, '0');
+                              const day = String(today.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
 
                               await attendanceService.create({
                                 academyId,
                                 studentId: student.id,
                                 classId: selectedClassForStudents.id,
+                                enrollmentId: student.enrollment_id,
                                 date: dateStr,
                                 status: 'present',
                                 note: '',
@@ -2966,12 +2993,17 @@ const Classes = () => {
 
                             try {
                               const today = new Date();
-                              const dateStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+                              // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+                              const year = today.getFullYear();
+                              const month = String(today.getMonth() + 1).padStart(2, '0');
+                              const day = String(today.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
 
                               await attendanceService.create({
                                 academyId,
                                 studentId: student.id,
                                 classId: selectedClassForStudents.id,
+                                enrollmentId: student.enrollment_id,
                                 date: dateStr,
                                 status: 'absent',
                                 note: '',
@@ -3018,12 +3050,17 @@ const Classes = () => {
 
                             try {
                               const today = new Date();
-                              const dateStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+                              // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+                              const year = today.getFullYear();
+                              const month = String(today.getMonth() + 1).padStart(2, '0');
+                              const day = String(today.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
 
                               await attendanceService.create({
                                 academyId,
                                 studentId: student.id,
                                 classId: selectedClassForStudents.id,
+                                enrollmentId: student.enrollment_id,
                                 date: dateStr,
                                 status: 'official', // 이월은 공결로 처리
                                 note: '이월',

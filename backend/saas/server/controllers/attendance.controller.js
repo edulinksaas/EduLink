@@ -36,7 +36,7 @@ export const getAttendanceByStudent = async (req, res, next) => {
 // POST /api/attendance
 export const createAttendance = async (req, res, next) => {
   try {
-    const { academy_id, student_id, class_id, date, status, note } = req.body;
+    const { academy_id, student_id, class_id, enrollment_id, date, status, note } = req.body;
 
     if (!academy_id || !student_id || !status) {
       return res
@@ -52,6 +52,7 @@ export const createAttendance = async (req, res, next) => {
       academy_id,
       student_id,
       class_id: class_id || null,
+      enrollment_id: enrollment_id || null,
       date: dateStr,
       status,
       note: note || '',

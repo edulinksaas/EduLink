@@ -36,7 +36,17 @@ export const getAttendanceByStudent = async (req, res, next) => {
 // POST /api/attendance
 export const createAttendance = async (req, res, next) => {
   try {
-    const { academy_id, student_id, class_id, date, status, note } = req.body;
+    const { academy_id, student_id, class_id, enrollment_id, date, status, note } = req.body;
+
+    console.log('📝 출석 기록 생성 요청:', {
+      academy_id,
+      student_id,
+      class_id,
+      enrollment_id,
+      date,
+      status,
+      note,
+    });
 
     if (!academy_id || !student_id || !status) {
       return res
@@ -52,14 +62,33 @@ export const createAttendance = async (req, res, next) => {
       academy_id,
       student_id,
       class_id: class_id || null,
+      enrollment_id: enrollment_id || null,
       date: dateStr,
       status,
       note: note || '',
     });
 
+    console.log('💾 저장할 출석 기록:', {
+      academy_id: record.academy_id,
+      student_id: record.student_id,
+      class_id: record.class_id,
+      enrollment_id: record.enrollment_id,
+      date: record.date,
+      status: record.status,
+      note: record.note,
+    });
+
     await record.save();
+    console.log('✅ 출석 기록 저장 성공');
     res.status(201).json({ record });
   } catch (error) {
+    console.error('❌ 출석 기록 저장 실패:', error);
+    console.error('에러 상세:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     next(error);
   }
 };

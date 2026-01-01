@@ -29,11 +29,12 @@ export const attendanceService = {
       note,
     }),
 
-  create: ({ academyId, studentId, classId, date, status, note }) =>
+  create: ({ academyId, studentId, classId, enrollmentId, date, status, note }) =>
     api.post('/attendance', {
       academy_id: academyId,
       student_id: studentId,
       class_id: classId,
+      enrollment_id: enrollmentId,
       date,
       status,
       note: note || '',

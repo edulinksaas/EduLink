@@ -7,6 +7,7 @@ export class AttendanceRecord {
     this.academy_id = data.academy_id;
     this.student_id = data.student_id;
     this.class_id = data.class_id;
+    this.enrollment_id = data.enrollment_id || null;
     this.date = data.date; // YYYY-MM-DD
     this.status = data.status; // 'present' | 'absent' | 'late' | 'sick'
     this.note = data.note || '';
@@ -55,6 +56,7 @@ export class AttendanceRecord {
         academy_id: this.academy_id,
         student_id: this.student_id,
         class_id: this.class_id || null,
+        enrollment_id: this.enrollment_id || null,
         date: this.date,
         status: this.status,
         note: this.note || '',

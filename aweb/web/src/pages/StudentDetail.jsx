@@ -194,7 +194,11 @@ function AttendanceCalendar({ month, records, onDayClick }) {
   }, [records]);
 
   const getStatusForDate = (date) => {
-    const key = date.toISOString().slice(0, 10);
+    // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const key = `${year}-${month}-${day}`;
     return recordMap[key];
   };
 
@@ -206,7 +210,11 @@ function AttendanceCalendar({ month, records, onDayClick }) {
   };
 
   const handleClick = (date) => {
-    const key = date.toISOString().slice(0, 10);
+    // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const key = `${year}-${month}-${day}`;
     onDayClick(key);
   };
 
@@ -536,8 +544,7 @@ function AttendanceDetailModal({
         
         // enrollmentId가 있으면 해당 수업의 출석 기록만 필터링
         if (enrollmentId) {
-          // TODO: enrollment별 출석 기록 필터링 로직 추가 필요
-          // 현재는 모든 출석 기록 표시
+          records = records.filter(record => record.enrollment_id === enrollmentId);
         }
         
         setAttendanceRecords(records);
@@ -574,6 +581,12 @@ function AttendanceDetailModal({
                 );
                 
                 let records = attendanceRes.data?.records || [];
+                
+                // enrollmentId가 있으면 해당 수업의 출석 기록만 필터링
+                if (enrollmentId) {
+                  records = records.filter(record => record.enrollment_id === enrollmentId);
+                }
+                
                 setAttendanceRecords(records);
               } catch (e) {
                 console.warn('출석 기록 새로고침 실패:', e);
@@ -647,7 +660,11 @@ function AttendanceDetailModal({
 
   const handleDateClick = (date, inCurrentMonth) => {
     if (!inCurrentMonth) return;
-    const dateStr = date.toISOString().slice(0, 10);
+    // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     
     setSelectedDate(dateStr);
     setSelectedStatus('');
@@ -905,7 +922,11 @@ function AttendanceDetailModal({
               {/* 캘린더 그리드 */}
               <div className="calendar-grid">
                 {calendarDays.map(({ date, inCurrentMonth }) => {
-                  const key = date.toISOString().slice(0, 10);
+                  // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 방지)
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const key = `${year}-${month}-${day}`;
                   const records = recordMap[key] || [];
                   const isToday =
                     new Date().toDateString() === date.toDateString() && inCurrentMonth;

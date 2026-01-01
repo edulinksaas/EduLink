@@ -16,6 +16,7 @@ import Form from '../components/Form';
 import ClassFormModal from '../components/ClassFormModal';
 import RegisterModal from '../components/RegisterModal';
 import './Classes.css';
+import './Students.css';
 
 const Classes = () => {
   const navigate = useNavigate();
@@ -58,14 +59,16 @@ const Classes = () => {
   const [isStudentRegisterModalOpen, setIsStudentRegisterModalOpen] = useState(false);
   const [isStudentEditModalOpen, setIsStudentEditModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [isRegisteringFromClassModal, setIsRegisteringFromClassModal] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [tuitionFees, setTuitionFees] = useState([]);
   const [studentFormData, setStudentFormData] = useState({
     name: '',
     parent_contact: '',
-    payment_method: '',
+    payment_method: '현금',
     class_id: '',
     teacher_id: '',
+    schedule: '',
     fee: '',
     receipt_file: null,
     note: '',
@@ -385,6 +388,33 @@ const Classes = () => {
       totalClasses: classes.length,
     });
   }, [students, teachers, classes]);
+
+  // 담당 선생님의 출근 요일 필터링
+  const availableDays = useMemo(() => {
+    if (!studentFormData.teacher_id) {
+      return days;
+    }
+    const selectedTeacher = teachers.find(t => t.id === studentFormData.teacher_id);
+    if (!selectedTeacher || !selectedTeacher.work_days) {
+      return days;
+    }
+    // work_days가 쉼표로 구분된 문자열인 경우 (예: "월,화,수")
+    const workDaysArray = selectedTeacher.work_days.split(',').map(d => d.trim());
+    return days.filter(d => workDaysArray.includes(d));
+  }, [teachers, studentFormData.teacher_id]);
+
+  // 담당 선생님과 요일에 따라 필터링된 수업 목록
+  const filteredClasses = useMemo(() => {
+    if (!studentFormData.teacher_id) {
+      return classes;
+    }
+    // 선생님과 요일 모두 필터링
+    let filtered = classes.filter(classItem => classItem.teacher_id === studentFormData.teacher_id);
+    if (studentFormData.schedule) {
+      filtered = filtered.filter(classItem => classItem.schedule === studentFormData.schedule);
+    }
+    return filtered;
+  }, [classes, studentFormData.teacher_id, studentFormData.schedule]);
 
   // AcademyContext의 academyId가 준비되면 데이터 로드
   useEffect(() => {
@@ -1984,12 +2014,14 @@ const Classes = () => {
         isOpen={isStudentRegisterModalOpen}
         onClose={() => {
           setIsStudentRegisterModalOpen(false);
+          setIsRegisteringFromClassModal(false);
           setStudentFormData({
             name: '',
             parent_contact: '',
             payment_method: '현금',
             class_id: '',
             teacher_id: '',
+            schedule: '',
             fee: '',
             receipt_file: null,
             note: '',
@@ -2031,6 +2063,11 @@ const Classes = () => {
                 return;
               }
 
+              if (!studentFormData.schedule) {
+                alert('요일을 선택해주세요.');
+                return;
+              }
+
               if (!studentFormData.fee) {
                 alert('수강료를 선택해주세요.');
                 return;
@@ -2046,6 +2083,7 @@ const Classes = () => {
                 academy_id: academyId,
                 class_id: studentFormData.class_id,
                 teacher_id: studentFormData.teacher_id,
+                schedule: studentFormData.schedule || null,
                 fee: studentFormData.fee ? parseInt(studentFormData.fee, 10) : null,
                 has_receipt: !!studentFormData.receipt_file,
               };
@@ -2071,12 +2109,14 @@ const Classes = () => {
 
               // 학생 등록 모달 닫기
               setIsStudentRegisterModalOpen(false);
+              setIsRegisteringFromClassModal(false);
               setStudentFormData({
                 name: '',
                 parent_contact: '',
-                payment_method: '',
+                payment_method: '현금',
                 class_id: '',
                 teacher_id: '',
+                schedule: '',
                 fee: '',
                 receipt_file: null,
                 note: '',
@@ -2091,214 +2131,321 @@ const Classes = () => {
               alert('학생 저장에 실패했습니다.');
             }
           }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+          className="student-register-form"
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                학생 이름 <span style={{ color: '#e74c3c' }}>*</span>
-              </label>
-              <input
-                type="text"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                value={studentFormData.name}
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, name: e.target.value })
-                }
-                placeholder="학생 이름을 입력하세요"
-                required
-              />
+          {/* 처음 2개 필드 가로 정렬 */}
+          <div className="form-row-two-columns">
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  학생 이름 <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  name="name"
+                  value={studentFormData.name}
+                  onChange={(e) =>
+                    setStudentFormData({ ...studentFormData, name: e.target.value })
+                  }
+                  placeholder="학생 이름을 입력하세요"
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                담당 선생님 <span style={{ color: '#e74c3c' }}>*</span>
-              </label>
-              <select
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                value={studentFormData.teacher_id}
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, teacher_id: e.target.value })
-                }
-                required
-              >
-                <option value="">선택하세요</option>
-                {teachers.map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>
-                    {teacher.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                학부모 연락처 <span style={{ color: '#e74c3c' }}>*</span>
-              </label>
-              <input
-                type="text"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                value={studentFormData.parent_contact}
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, parent_contact: e.target.value })
-                }
-                placeholder="010-1234-5678"
-                required
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                수업 이름 <span style={{ color: '#e74c3c' }}>*</span>
-              </label>
-              <select
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                value={studentFormData.class_id}
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, class_id: e.target.value })
-                }
-                required
-              >
-                <option value="">선택하세요</option>
-                {classes.map((classItem) => (
-                  <option key={classItem.id} value={classItem.id}>
-                    {classItem.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                결제 방법 <span style={{ color: '#e74c3c' }}>*</span>
-              </label>
-              <select
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                value={studentFormData.payment_method}
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, payment_method: e.target.value })
-                }
-                required
-              >
-                <option value="">선택하세요</option>
-                {paymentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                수강료 <span style={{ color: '#e74c3c' }}>*</span>
-              </label>
-              <select
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                value={studentFormData.fee}
-                onChange={(e) => {
-                  const selectedFeeValue = e.target.value;
-                  // 선택된 수강료의 결제 방법 찾기
-                  const selectedFee = tuitionFees.find(fee => fee.value === selectedFeeValue);
-                  setStudentFormData({ 
-                    ...studentFormData, 
-                    fee: selectedFeeValue,
-                    payment_method: selectedFee?.payment_method || studentFormData.payment_method
-                  });
-                }}
-                required
-              >
-                <option value="">선택하세요</option>
-                {tuitionFees.map((fee) => {
-                  // 수강료 표시 형식: "수업유형 - 결제방법: 금액" 또는 "금액"
-                  const displayText = fee.class_type && fee.payment_method
-                    ? `${fee.class_type} - ${fee.payment_method}: ${fee.amount}`
-                    : fee.amount;
-                  return (
-                    <option key={fee.id} value={fee.value}>
-                      {displayText}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-                영수증 등록하기
-              </label>
-              <input
-                type="file"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                }}
-                accept="image/*,.pdf"
-                onChange={(e) =>
-                  setStudentFormData({ ...studentFormData, receipt_file: e.target.files[0] })
-                }
-              />
-              {studentFormData.receipt_file && (
-                <span style={{ fontSize: '0.9rem', color: '#666', marginTop: '4px', display: 'block' }}>
-                  선택된 파일: {studentFormData.receipt_file.name}
-                </span>
-              )}
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  담당 선생님 <span className="required">*</span>
+                </label>
+                <div className="button-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {teachers.map((teacher) => {
+                    const isSelected = studentFormData.teacher_id === teacher.id;
+                    const isDisabled = isRegisteringFromClassModal; // 수업 모달에서 등록하는 경우 비활성화
+                    return (
+                      <button
+                        key={teacher.id}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => {
+                          // 수업 모달에서 등록하는 경우, 수업 정보를 유지하면서 필터링만 업데이트
+                          if (isRegisteringFromClassModal && selectedClassForStudents) {
+                            const newFilteredClasses = classes.filter(
+                              c => c.teacher_id === teacher.id && c.schedule === studentFormData.schedule
+                            );
+                            // 현재 선택된 수업이 새로운 필터에 포함되어 있으면 유지
+                            const shouldKeepClass = newFilteredClasses.some(c => c.id === studentFormData.class_id);
+                            setStudentFormData({
+                              ...studentFormData,
+                              teacher_id: teacher.id,
+                              class_id: shouldKeepClass ? studentFormData.class_id : '',
+                            });
+                          } else {
+                            setStudentFormData({
+                              ...studentFormData,
+                              teacher_id: teacher.id,
+                              schedule: '', // 요일 선택 초기화
+                              class_id: '', // 수업 선택 초기화
+                            });
+                          }
+                        }}
+                        style={{
+                          padding: '10px 20px',
+                          border: `2px solid ${isSelected ? '#667eea' : '#e0e0e0'}`,
+                          borderRadius: '8px',
+                          background: isSelected ? '#667eea' : 'white',
+                          color: isSelected ? 'white' : '#2c3e50',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          fontSize: '0.95rem',
+                          fontWeight: isSelected ? '600' : '500',
+                          transition: 'all 0.2s',
+                          opacity: isDisabled ? 0.6 : 1,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isDisabled && !isSelected) {
+                            e.target.style.borderColor = '#667eea';
+                            e.target.style.background = '#f0f0ff';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isDisabled && !isSelected) {
+                            e.target.style.borderColor = '#e0e0e0';
+                            e.target.style.background = 'white';
+                          }
+                        }}
+                      >
+                        {teacher.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-              메모
-            </label>
+          {/* 요일 선택 필드와 수업 이름 선택 필드 (가로 정렬) */}
+          <div className="form-row-two-columns">
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  요일 <span className="required">*</span>
+                </label>
+                <div className="button-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {availableDays.map((day) => {
+                    const isSelected = studentFormData.schedule === day;
+                    const isDisabled = !studentFormData.teacher_id || isRegisteringFromClassModal; // 수업 모달에서 등록하는 경우 비활성화
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          if (!isDisabled) {
+                            // 수업 모달에서 등록하는 경우, 수업 정보를 유지하면서 필터링만 업데이트
+                            if (isRegisteringFromClassModal && selectedClassForStudents) {
+                              const newFilteredClasses = classes.filter(
+                                c => c.teacher_id === studentFormData.teacher_id && c.schedule === day
+                              );
+                              // 현재 선택된 수업이 새로운 필터에 포함되어 있으면 유지
+                              const shouldKeepClass = newFilteredClasses.some(c => c.id === studentFormData.class_id);
+                              setStudentFormData({
+                                ...studentFormData,
+                                schedule: day,
+                                class_id: shouldKeepClass ? studentFormData.class_id : '',
+                              });
+                            } else {
+                              setStudentFormData({
+                                ...studentFormData,
+                                schedule: day,
+                                class_id: '', // 수업 선택 초기화
+                              });
+                            }
+                          }
+                        }}
+                        disabled={isDisabled}
+                        style={{
+                          padding: '10px 20px',
+                          border: `2px solid ${isSelected ? '#667eea' : '#e0e0e0'}`,
+                          borderRadius: '8px',
+                          background: isSelected ? '#667eea' : 'white',
+                          color: isSelected ? 'white' : '#2c3e50',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          fontSize: '0.95rem',
+                          fontWeight: isSelected ? '600' : '500',
+                          transition: 'all 0.2s',
+                          opacity: isDisabled ? 0.6 : 1,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isDisabled && !isSelected) {
+                            e.target.style.borderColor = '#667eea';
+                            e.target.style.background = '#f0f0ff';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isDisabled && !isSelected) {
+                            e.target.style.borderColor = '#e0e0e0';
+                            e.target.style.background = 'white';
+                          }
+                        }}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!studentFormData.teacher_id && (
+                  <div style={{ marginTop: '8px', fontSize: '0.875rem', color: '#999' }}>
+                    담당 선생님을 먼저 선택하세요
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  수업 이름 <span className="required">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  name="class_id"
+                  value={studentFormData.class_id}
+                  onChange={(e) =>
+                    setStudentFormData({ ...studentFormData, class_id: e.target.value })
+                  }
+                  required
+                  disabled={!studentFormData.teacher_id || !studentFormData.schedule || isRegisteringFromClassModal}
+                >
+                  <option value="">
+                    {!studentFormData.teacher_id 
+                      ? '담당 선생님을 먼저 선택하세요'
+                      : !studentFormData.schedule
+                      ? '요일을 먼저 선택하세요'
+                      : '선택하세요'}
+                  </option>
+                  {filteredClasses.map((classItem) => (
+                    <option key={classItem.id} value={classItem.id}>
+                      {classItem.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 학부모 연락처와 영수증 등록하기 (가로 정렬) */}
+          <div className="form-row-two-columns">
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  학부모 연락처 <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  name="parent_contact"
+                  value={studentFormData.parent_contact}
+                  onChange={(e) =>
+                    setStudentFormData({ ...studentFormData, parent_contact: e.target.value })
+                  }
+                  placeholder="010-1234-5678"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">영수증 등록하기</label>
+                <div className="file-upload-wrapper">
+                  <input
+                    type="file"
+                    id="receipt_file"
+                    name="receipt_file"
+                    className="file-input"
+                    accept="image/*,.pdf"
+                    onChange={(e) =>
+                      setStudentFormData({ ...studentFormData, receipt_file: e.target.files[0] || null })
+                    }
+                  />
+                  <label htmlFor="receipt_file" className="file-label">
+                    파일 선택
+                  </label>
+                  {studentFormData.receipt_file && (
+                    <span className="file-name">{studentFormData.receipt_file.name}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 결제 방법과 수강료 (가로 정렬) */}
+          <div className="form-row-two-columns">
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  결제 방법 <span className="required">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  name="payment_method"
+                  value={studentFormData.payment_method}
+                  onChange={(e) =>
+                    setStudentFormData({ ...studentFormData, payment_method: e.target.value })
+                  }
+                  required
+                >
+                  <option value="현금">현금</option>
+                  <option value="카드">카드</option>
+                  <option value="계좌이체">계좌이체</option>
+                  <option value="무통장입금">무통장입금</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-column">
+              <div className="form-group">
+                <label className="form-label">
+                  수강료 <span className="required">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  name="fee"
+                  value={studentFormData.fee}
+                  onChange={(e) => {
+                    const selectedFeeValue = e.target.value;
+                    // 선택된 수강료의 결제 방법 찾기
+                    const selectedFee = tuitionFees.find(fee => fee.value === selectedFeeValue);
+                    setStudentFormData({ 
+                      ...studentFormData, 
+                      fee: selectedFeeValue,
+                      payment_method: selectedFee?.payment_method || studentFormData.payment_method
+                    });
+                  }}
+                  required
+                >
+                  <option value="">선택하세요</option>
+                  {tuitionFees.map((fee) => {
+                    // 수강료 표시 형식: "수업유형 - 결제방법: 금액" 또는 "금액"
+                    const displayText = fee.class_type && fee.payment_method
+                      ? `${fee.class_type} - ${fee.payment_method}: ${fee.amount}`
+                      : fee.amount;
+                    return (
+                      <option key={fee.id} value={fee.value}>
+                        {displayText}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-group full-width">
+            <label className="form-label">메모</label>
             <textarea
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '1rem',
-                minHeight: '80px',
-                resize: 'vertical',
-              }}
+              className="form-textarea"
+              name="note"
               value={studentFormData.note}
               onChange={(e) =>
                 setStudentFormData({ ...studentFormData, note: e.target.value })
@@ -2308,49 +2455,30 @@ const Classes = () => {
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+          <div className="form-actions">
             <button
               type="button"
+              className="btn-cancel"
               onClick={() => {
                 setIsStudentRegisterModalOpen(false);
+                setIsRegisteringFromClassModal(false);
                 setStudentFormData({
                   name: '',
                   parent_contact: '',
-                  payment_method: '',
+                  payment_method: '현금',
                   class_id: '',
                   teacher_id: '',
+                  schedule: '',
                   fee: '',
                   receipt_file: null,
                   note: '',
                 });
               }}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#95a5a6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
             >
               취소
             </button>
-            <button
-              type="submit"
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#3498db',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              등록
+            <button type="submit" className="btn-submit">
+              등록하기
             </button>
           </div>
         </form>
@@ -2368,6 +2496,7 @@ const Classes = () => {
             payment_method: '현금',
             class_id: '',
             teacher_id: '',
+            schedule: '',
             fee: '',
             receipt_file: null,
             note: '',
@@ -2459,9 +2588,10 @@ const Classes = () => {
               setStudentFormData({
                 name: '',
                 parent_contact: '',
-                payment_method: '',
+                payment_method: '현금',
                 class_id: '',
                 teacher_id: '',
+                schedule: '',
                 fee: '',
                 receipt_file: null,
                 note: '',
@@ -2748,16 +2878,20 @@ const Classes = () => {
                     }
                   }
                   
+                  // 선택된 수업의 요일 정보 가져오기
+                  const selectedClassSchedule = selectedClassForStudents.schedule || '';
                   setStudentFormData({
                     name: '',
                     parent_contact: generateParentContact(),
-                    payment_method: '',
+                    payment_method: '현금',
                     class_id: selectedClassForStudents.id,
                     teacher_id: selectedClassForStudents.teacher_id || '',
+                    schedule: selectedClassSchedule,
                     fee: '',
                     receipt_file: null,
                     note: '',
                   });
+                  setIsRegisteringFromClassModal(true); // 수업 모달에서 등록하는 경우 표시
                   setIsStudentModalOpen(false);
                   setIsStudentRegisterModalOpen(true);
                 }
@@ -2812,12 +2946,16 @@ const Classes = () => {
                             setEditingStudent(student);
                             // fee 값을 문자열로 변환 (select 옵션의 value와 매칭)
                             const feeValue = student.fee ? String(student.fee) : '';
+                            // 수업에서 요일 정보 가져오기
+                            const studentClass = classes.find(c => c.id === student.class_id);
+                            const classSchedule = studentClass?.schedule || '';
                             setStudentFormData({
                               name: student.name || '',
                               parent_contact: student.parent_contact || '',
-                              payment_method: '',
+                              payment_method: '현금',
                               class_id: student.class_id || '',
                               teacher_id: student.teacher_id || '',
+                              schedule: classSchedule,
                               fee: feeValue,
                               receipt_file: null,
                               note: student.note || '',

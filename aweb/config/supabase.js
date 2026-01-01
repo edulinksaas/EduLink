@@ -42,6 +42,38 @@ export const supabase = cleanSupabaseUrl && cleanSupabaseKey
       global: {
         headers: {
           'Content-Type': 'application/json',
+        },
+        // 타임아웃 및 재시도 설정
+        fetch: async (url, options = {}) => {
+          const timeout = 30000; // 30초 타임아웃
+          
+          // AbortController를 사용한 타임아웃 (호환성 좋음)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+          
+          try {
+            const response = await fetch(url, {
+              ...options,
+              signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            return response;
+          } catch (error) {
+            clearTimeout(timeoutId);
+            
+            // ECONNRESET 등의 네트워크 오류를 더 명확하게 처리
+            if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+              const timeoutError = new Error('Supabase 연결 타임아웃: 서버 응답이 없습니다.');
+              timeoutError.code = 'ETIMEDOUT';
+              throw timeoutError;
+            }
+            if (error.code === 'ECONNRESET' || error.message?.includes('ECONNRESET')) {
+              const resetError = new Error('Supabase 연결이 리셋되었습니다. 네트워크 연결을 확인해주세요.');
+              resetError.code = 'ECONNRESET';
+              throw resetError;
+            }
+            throw error;
+          }
         }
       }
     })
@@ -53,8 +85,8 @@ if (supabaseServiceKey) {
   console.log('⚠️ Supabase Anon Key 사용 중 (RLS 정책 적용됨)');
 }
 
-// 연결 테스트 함수
-export const testSupabaseConnection = async () => {
+// 연결 테스트 함수 (재시도 로직 포함)
+export const testSupabaseConnection = async (maxRetries = 3, retryDelay = 1000) => {
   if (!supabase) {
     console.error('❌ Supabase 클라이언트가 초기화되지 않았습니다.');
     console.error('   SUPABASE_URL:', process.env.SUPABASE_URL ? '설정됨' : '없음');
@@ -62,33 +94,84 @@ export const testSupabaseConnection = async () => {
     return { success: false, error: 'Supabase 클라이언트가 초기화되지 않았습니다.' };
   }
   
-  try {
-    console.log('🔍 Supabase 연결 테스트 중...');
-    console.log('   URL:', supabaseUrl);
-    
-    // 간단한 쿼리로 테스트 (에러 발생 시 더 안전한 방법 사용)
-    const { data, error } = await supabase
-      .from('academies')
-      .select('id')
-      .limit(1);
-    
-    if (error) {
-      console.error('❌ Supabase 쿼리 에러:', error);
-      console.error('   에러 코드:', error.code);
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.log(`🔄 Supabase 연결 재시도 중... (${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+      } else {
+        console.log('🔍 Supabase 연결 테스트 중...');
+      }
+      console.log('   URL:', supabaseUrl);
+      
+      // 간단한 쿼리로 테스트 (에러 발생 시 더 안전한 방법 사용)
+      const { data, error } = await supabase
+        .from('academies')
+        .select('id')
+        .limit(1);
+      
+      if (error) {
+        // 일시적인 네트워크 오류인 경우 재시도
+        if (error.message?.includes('fetch failed') || 
+            error.message?.includes('ECONNRESET') ||
+            error.message?.includes('timeout') ||
+            error.code === 'ECONNRESET') {
+          lastError = error;
+          if (attempt < maxRetries) {
+            console.warn(`⚠️  일시적인 네트워크 오류 감지, 재시도 예정... (${attempt}/${maxRetries})`);
+            continue;
+          }
+        }
+        
+        console.error('❌ Supabase 쿼리 에러:', error);
+        console.error('   에러 코드:', error.code);
+        console.error('   에러 메시지:', error.message);
+        console.error('   에러 상세:', error.details);
+        console.error('   에러 힌트:', error.hint);
+        return { success: false, error: error.message || 'Supabase 쿼리 실패' };
+      }
+      
+      if (attempt > 1) {
+        console.log(`✅ Supabase 연결 성공 (재시도 ${attempt}회차)`);
+      } else {
+        console.log('✅ Supabase 연결 성공');
+      }
+      return { success: true };
+    } catch (error) {
+      lastError = error;
+      
+      // 일시적인 네트워크 오류인 경우 재시도
+      if (error.message?.includes('fetch failed') || 
+          error.message?.includes('ECONNRESET') ||
+          error.message?.includes('timeout') ||
+          error.code === 'ECONNRESET') {
+        if (attempt < maxRetries) {
+          console.warn(`⚠️  네트워크 오류 감지, 재시도 예정... (${attempt}/${maxRetries})`);
+          console.warn('   에러:', error.message);
+          continue;
+        }
+      }
+      
+      console.error('❌ Supabase 연결 예외:', error);
       console.error('   에러 메시지:', error.message);
-      console.error('   에러 상세:', error.details);
-      console.error('   에러 힌트:', error.hint);
-      return { success: false, error: error.message || 'Supabase 쿼리 실패' };
+      if (attempt === maxRetries) {
+        console.error('   에러 스택:', error.stack);
+      }
+      
+      // 마지막 시도가 아니면 계속
+      if (attempt < maxRetries) {
+        continue;
+      }
     }
-    
-    console.log('✅ Supabase 연결 성공');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Supabase 연결 예외:', error);
-    console.error('   에러 메시지:', error.message);
-    console.error('   에러 스택:', error.stack);
-    return { success: false, error: error.message || 'Supabase 연결 실패' };
   }
+  
+  // 모든 재시도 실패
+  const finalError = lastError?.message || 'Supabase 연결 실패';
+  console.error(`❌ Supabase 연결 실패 (${maxRetries}회 시도 후)`);
+  console.error('   최종 에러:', finalError);
+  return { success: false, error: finalError };
 };
 
 export default supabase;

@@ -10,6 +10,8 @@ export class TimetableSettings {
     this.day_time_settings = data.day_time_settings || data.dayTimeSettings || {};
     this.timetable_name = data.timetable_name || data.timetableName || '';
     this.classroom_ids = data.classroom_ids || data.classroomIds || [];
+    this.building_names = data.building_names || data.buildingNames || null;
+    this.building_classrooms = data.building_classrooms || data.buildingClassrooms || null;
     this.createdAt = data.created_at || data.createdAt || new Date();
     this.updatedAt = data.updated_at || data.updatedAt || new Date();
   }
@@ -64,6 +66,21 @@ export class TimetableSettings {
         settingsData.classroom_ids = this.classroom_ids;
       }
       
+      // building_names가 있으면 추가
+      if (this.building_names) {
+        settingsData.building_names = this.building_names;
+      }
+      
+      // building_classrooms가 있으면 추가
+      if (this.building_classrooms) {
+        settingsData.building_classrooms = this.building_classrooms;
+      }
+      
+      // building_classrooms가 있으면 추가
+      if (this.building_classrooms) {
+        settingsData.building_classrooms = this.building_classrooms;
+      }
+      
       // 기존 설정이 있는지 확인
       const existing = await TimetableSettings.findByAcademyId(this.academy_id);
       
@@ -74,6 +91,16 @@ export class TimetableSettings {
         // classroom_ids가 있으면 추가 시도
         if (Array.isArray(this.classroom_ids)) {
           updateData.classroom_ids = this.classroom_ids;
+        }
+        
+        // building_names가 있으면 추가
+        if (this.building_names) {
+          updateData.building_names = this.building_names;
+        }
+        
+        // building_classrooms가 있으면 추가
+        if (this.building_classrooms) {
+          updateData.building_classrooms = this.building_classrooms;
         }
         
         const { data: updateResult, error: updateError } = await supabase
@@ -121,6 +148,16 @@ export class TimetableSettings {
         // classroom_ids가 있으면 추가 시도
         if (Array.isArray(this.classroom_ids)) {
           insertData.classroom_ids = this.classroom_ids;
+        }
+        
+        // building_names가 있으면 추가
+        if (this.building_names) {
+          insertData.building_names = this.building_names;
+        }
+        
+        // building_classrooms가 있으면 추가
+        if (this.building_classrooms) {
+          insertData.building_classrooms = this.building_classrooms;
         }
         
         const { data: insertResult, error: insertError } = await supabase

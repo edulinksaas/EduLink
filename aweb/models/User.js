@@ -158,12 +158,12 @@ export class User {
         userData.password_hash = this.password_hash;
       }
 
-      // email과 phone은 값이 있을 때만 포함 (null이면 아예 제외)
-      if (this.email && this.email.trim() !== '') {
-        userData.email = this.email.trim();
+      // email과 phone은 명시적으로 설정 (null이어도 업데이트)
+      if (this.email !== undefined) {
+        userData.email = this.email && this.email.trim() !== '' ? this.email.trim() : null;
       }
-      if (this.phone && this.phone.trim() !== '') {
-        userData.phone = this.phone.trim();
+      if (this.phone !== undefined) {
+        userData.phone = this.phone && this.phone.trim() !== '' ? this.phone.trim() : null;
       }
       
       // 이메일 인증 관련 필드 (컬럼이 존재하는 경우에만 포함)

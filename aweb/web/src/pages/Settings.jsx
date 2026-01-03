@@ -1,46 +1,103 @@
 import { useState, useEffect } from 'react';
-import { academyService } from '../services/academyService';
+import { useNavigate } from 'react-router-dom';
 import { subjectService } from '../services/subjectService';
 import { classroomService } from '../services/classroomService';
 import { timetableSettingsService } from '../services/timetableSettingsService';
 import { tuitionFeeService } from '../services/tuitionFeeService';
+import { useAuth } from '../contexts/AuthContext';
 import { useAcademy } from '../contexts/AcademyContext';
 import { authService } from '../services/authService';
+import { userService } from '../services/userService';
+import { supabase } from '../config/supabase';
+import { 
+  FaUser, FaBuilding, FaClock, FaFileAlt, FaCheckCircle, 
+  FaWonSign, FaCreditCard, FaLock, FaBell, FaGlobe, FaInfoCircle, 
+  FaHeadset, FaCog, FaChevronRight, FaBook, FaClock as FaTimeClock
+} from 'react-icons/fa';
 import './Settings.css';
 
+// 토글 스위치 컴포넌트
+const ToggleSwitch = ({ checked, onChange, disabled = false }) => {
+  return (
+    <label className="toggle-switch">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <span className="toggle-slider"></span>
+    </label>
+  );
+};
+
 const Settings = () => {
-  const { updateAcademy } = useAcademy();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { academy, updateAcademy } = useAcademy();
   
   // 편집 모드 상태 (각 섹션별로 관리)
-  const [isEditMode, setIsEditMode] = useState(false); // 학원 정보
   const [isSubjectEditMode, setIsSubjectEditMode] = useState(false); // 과목 관리
   const [isTimetableEditMode, setIsTimetableEditMode] = useState(false); // 시간표 설정
   const [isTuitionFeeEditMode, setIsTuitionFeeEditMode] = useState(false); // 수강료 관리
   const [isPasswordEditMode, setIsPasswordEditMode] = useState(false); // 비밀번호 변경
+  const [isAcademyEditMode, setIsAcademyEditMode] = useState(false); // 학원 설정
   
-  // 학원 정보 상태
+  // 계정 설정 상태
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userPhone, setUserPhone] = useState('');
+  const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
+  const [isEditingUserName, setIsEditingUserName] = useState(false);
+  const [isEditingUserEmail, setIsEditingUserEmail] = useState(false);
+  const [isEditingUserPhone, setIsEditingUserPhone] = useState(false);
+  
+  // 학원 설정 상태
   const [academyName, setAcademyName] = useState('');
   const [academyAddress, setAcademyAddress] = useState('');
   const [academyFloor, setAcademyFloor] = useState('');
   const [academyLogo, setAcademyLogo] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
-  const [academyCode, setAcademyCode] = useState('');
-
-  // 색상 옵션 정의
+  const [isLoadingAcademyInfo, setIsLoadingAcademyInfo] = useState(true);
+  const [originalAcademyData, setOriginalAcademyData] = useState(null);
+  
+  // 이수 설정 상태
+  const [completionCriteria, setCompletionCriteria] = useState(70);
+  
+  // 결제 방법 토글 상태
+  const [paymentMethodToggles, setPaymentMethodToggles] = useState({
+    cash: true,
+    card: true,
+    transfer: true,
+    mobile: true
+  });
+  
+  // 보안 설정 상태
+  const [twoFactorAuth, setTwoFactorAuth] = useState(false);
+  const [passwordLastChanged, setPasswordLastChanged] = useState('2024년 11월 10일');
+  
+  // 알림 설정 상태
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [classNotifications, setClassNotifications] = useState(true);
+  const [marketingNotifications, setMarketingNotifications] = useState(false);
+  
+  // 시스템 설정 상태
+  const [language, setLanguage] = useState('한국어');
+  const [timezone, setTimezone] = useState('서울 (GMT+9)');
+  const [darkMode, setDarkMode] = useState(false);
+  
+  // 색상 옵션 정의 (이미지에 보이는 순서대로)
   const colorOptions = [
+    { name: 'blue', label: '파랑', value: '#3498db' },
+    { name: 'pink', label: '분홍', value: '#FFC0CB' },
     { name: 'red', label: '빨강', value: '#FF0000' },
     { name: 'orange', label: '주황', value: '#FF8C00' },
     { name: 'yellow', label: '노랑', value: '#FFD700' },
+    { name: 'lightgreen', label: '연두', value: '#90EE90' },
     { name: 'green', label: '초록', value: '#008000' },
-    { name: 'blue', label: '파랑', value: '#0000FF' },
-    { name: 'navy', label: '네이비', value: '#000080' },
+    { name: 'teal', label: '청록', value: '#008080' },
     { name: 'violet', label: '보라', value: '#8A2BE2' },
-    { name: 'gray', label: '회색', value: '#808080' },
-    { name: 'silver', label: '은색', value: '#C0C0C0' },
-    { name: 'gold', label: '금색', value: '#FFD700' },
-    { name: 'skyblue', label: '하늘색', value: '#87CEEB' },
-    { name: 'lightgreen', label: '연두색', value: '#90EE90' },
-    { name: 'pink', label: '분홍', value: '#FFC0CB' },
+    { name: 'navy', label: '남색', value: '#000080' },
   ];
   
   // 과목 관리 상태
@@ -52,9 +109,6 @@ const Settings = () => {
   const [editSubjectName, setEditSubjectName] = useState('');
   const [editSubjectColor, setEditSubjectColor] = useState('');
   const [editSubjectDescription, setEditSubjectDescription] = useState('');
-  // 학원 정보 저장 기능 임시 비활성화 - 테스트용 하드코딩 academy_id 사용
-  // 테스트용: 아래 주석을 해제하고 실제 학원 ID를 입력하면 학원이 없어도 테스트 가능
-  // const [selectedAcademy, setSelectedAcademy] = useState('your-academy-id-here');
   const [selectedAcademy, setSelectedAcademy] = useState('');
 
   // 시간표 설정 상태
@@ -70,9 +124,11 @@ const Settings = () => {
     '일': { startTime: '오전 09:00', endTime: '오후 10:00' },
   });
   const [timetableName, setTimetableName] = useState('');
-  const [classrooms, setClassrooms] = useState(['']); // 이름만 저장 (UI용) - 처음에는 하나만
+  // 관별 강의실 관리 구조: [{ id: 1, name: '1관', classrooms: ['강의실1'], classroomIds: [id1] }, ...]
+  const [buildings, setBuildings] = useState([
+    { id: 1, name: '1관', classrooms: [''], classroomIds: [null] }
+  ]);
   const [availableClassrooms, setAvailableClassrooms] = useState([]); // DB에서 로드한 전체 강의실 목록
-  const [selectedClassroomIds, setSelectedClassroomIds] = useState([null]); // 선택된 강의실 ID 배열 - 처음에는 하나만
 
   // 수강료 관리 상태
   const [tuitionFees, setTuitionFees] = useState([]);
@@ -307,13 +363,43 @@ const Settings = () => {
   const days = ['월', '화', '수', '목', '금', '토', '일'];
   const timeIntervals = ['30분', '40분', '50분', '1시간', '1시간 30분', '2시간'];
 
+  // AcademyContext에서 학원 ID를 가져와서 selectedAcademy 초기화
   useEffect(() => {
-    loadAcademy();
-  }, []);
+    if (academy && academy.id) {
+      console.log('✅ AcademyContext에서 학원 정보 로드:', {
+        id: academy.id,
+        name: academy.name,
+        code: academy.code
+      });
+      setSelectedAcademy(academy.id);
+    } else if (!academy && supabase) {
+      // AcademyContext에 없으면 Supabase에서 직접 조회 시도
+      console.log('⚠️ AcademyContext에 학원 정보가 없어 Supabase에서 로드 시도');
+      const loadAcademyFromSupabase = async () => {
+        try {
+          const { data: academies, error } = await supabase
+            .from('academies')
+            .select('id')
+            .limit(1);
+          
+          if (!error && academies && academies.length > 0) {
+            console.log('✅ Supabase에서 학원 자동 선택:', academies[0].id);
+            setSelectedAcademy(academies[0].id);
+          } else {
+            console.warn('⚠️ 등록된 학원이 없습니다.');
+          }
+        } catch (error) {
+          console.error('❌ 학원 로드 실패:', error);
+        }
+      };
+      loadAcademyFromSupabase();
+    }
+  }, [academy]);
 
   // selectedAcademy가 변경될 때마다 과목, 강의실, 시간표 설정, 수강료 로드
   useEffect(() => {
     if (selectedAcademy) {
+      console.log('🔄 selectedAcademy 변경됨, 데이터 로드 시작:', selectedAcademy);
       loadSubjects();
       loadClassrooms();
       loadTimetableSettings();
@@ -321,71 +407,6 @@ const Settings = () => {
     }
   }, [selectedAcademy]);
 
-  const generateAcademyCode = () => {
-    // 영문자와 숫자 조합으로 8자리 코드 생성
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-  };
-
-  const loadAcademy = async () => {
-    try {
-      const response = await academyService.getAll();
-      const academies = response.data.academies || [];
-      if (academies.length > 0) {
-        const academy = academies[0];
-        console.log('학원 정보 로드 성공:', academy);
-        setAcademyName(academy.name || '');
-        setAcademyAddress(academy.address || '');
-        setAcademyFloor(academy.floor || '');
-        setLogoPreview(academy.logo_url || '');
-        setAcademyCode(academy.code || '');
-        setSelectedAcademy(academy.id);
-      } else {
-        console.log('학원 정보가 없습니다. 새 코드 생성');
-        // 학원이 없으면 새 코드 생성 (다른 필드는 유지)
-        if (!academyCode) {
-          setAcademyCode(generateAcademyCode());
-        }
-      }
-    } catch (error) {
-      console.error('학원 정보 로드 실패:', error);
-      console.error('에러 상세:', error.response?.data || error.message);
-      // 에러 발생 시에도 기존 데이터는 유지하고, 코드만 생성 (코드가 없는 경우)
-      if (!academyCode) {
-        setAcademyCode(generateAcademyCode());
-      }
-    }
-  };
-
-  const handleGenerateCode = () => {
-    const newCode = generateAcademyCode();
-    setAcademyCode(newCode);
-  };
-
-  const handleCopyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(academyCode);
-      alert('학원 코드가 클립보드에 복사되었습니다.');
-    } catch (error) {
-      console.error('복사 실패:', error);
-      // 폴백: 텍스트 영역 사용
-      const textArea = document.createElement('textarea');
-      textArea.value = academyCode;
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        alert('학원 코드가 클립보드에 복사되었습니다.');
-      } catch (err) {
-        alert('복사에 실패했습니다. 코드를 직접 복사해주세요.');
-      }
-      document.body.removeChild(textArea);
-    }
-  };
 
   const loadTimetableSettings = async () => {
     if (!selectedAcademy) {
@@ -411,31 +432,189 @@ const Settings = () => {
         if (settings.timetable_name) {
           setTimetableName(settings.timetable_name);
         }
-        if (settings.classroom_ids && Array.isArray(settings.classroom_ids) && settings.classroom_ids.length > 0) {
-          setSelectedClassroomIds(settings.classroom_ids);
-          console.log('✅ 시간표 설정에서 강의실 ID 로드:', settings.classroom_ids);
+        // 관별 강의실 로드
+        try {
+          const classroomsResponse = await classroomService.getAll(selectedAcademy);
+          const allClassrooms = classroomsResponse.data.classrooms || [];
           
-          // 강의실 ID에 맞는 이름도 로드
-          try {
-            const classroomsResponse = await classroomService.getAll(selectedAcademy);
-            const allClassrooms = classroomsResponse.data.classrooms || [];
-            const classroomNames = settings.classroom_ids.map(id => {
-              const found = allClassrooms.find(c => c.id === id);
-              return found ? found.name : '';
-            }).filter(name => name);
+          console.log('📋 전체 강의실 목록:', allClassrooms.map(c => ({ id: c.id, name: c.name })));
+          console.log('📋 설정 데이터:', {
+            building_classrooms: settings.building_classrooms,
+            building_names: settings.building_names,
+            classroom_ids: settings.classroom_ids
+          });
+          
+          let loadedBuildings = [];
+          
+          // building_classrooms가 있으면 관별 강의실 구조 사용
+          if (settings.building_classrooms && typeof settings.building_classrooms === 'object') {
+            const buildingNames = settings.building_names || [];
+            const buildingNamesArray = Array.isArray(buildingNames) 
+              ? buildingNames 
+              : (buildingNames.building1 || buildingNames.building2 
+                  ? [{ id: 1, name: buildingNames.building1 || '1관' }, ...(buildingNames.building2 ? [{ id: 2, name: buildingNames.building2 }] : [])]
+                  : [{ id: 1, name: '1관' }]);
             
-            if (classroomNames.length > 0) {
-              // 실제 저장된 강의실 개수만큼만 표시 (빈 문자열로 채우지 않음)
-              setClassrooms(classroomNames);
-              console.log('✅ 강의실 이름 로드:', classroomNames);
-            } else {
-              // 강의실이 없으면 최소 하나의 빈 입력창 표시
-              setClassrooms(['']);
-              setSelectedClassroomIds([null]);
+            console.log('📋 관 이름 배열:', buildingNamesArray);
+            
+            loadedBuildings = buildingNamesArray.map(building => {
+              const classroomIds = settings.building_classrooms[building.id] || [];
+              console.log(`📋 관 ${building.id} (${building.name})의 강의실 ID:`, classroomIds);
+              
+              const classrooms = classroomIds.map(id => {
+                const found = allClassrooms.find(c => c.id === id);
+                if (!found) {
+                  console.warn(`⚠️ 강의실 ID ${id}를 찾을 수 없습니다.`);
+                }
+                return found ? found.name : '';
+              }).filter(name => name);
+              
+              console.log(`📋 관 ${building.id} (${building.name})의 강의실 이름:`, classrooms);
+              
+              return {
+                id: building.id,
+                name: building.name,
+                classrooms: classrooms.length > 0 ? classrooms : [''],
+                classroomIds: classroomIds.length > 0 ? classroomIds : [null]
+              };
+            });
+            
+            // 모든 관의 강의실이 비어있거나 유효하지 않으면 초기화
+            const hasValidClassrooms = loadedBuildings.some(b => 
+              b.classrooms.some(c => c && c.trim()) || 
+              b.classroomIds.some(id => id !== null)
+            );
+            
+            if (!hasValidClassrooms) {
+              console.log('⚠️ 저장된 강의실이 모두 비어있어 초기화합니다.');
+              loadedBuildings = [
+                { id: 1, name: '1관', classrooms: [''], classroomIds: [null] }
+              ];
+              // DB도 초기화
+              try {
+                await timetableSettingsService.save({
+                  academy_id: selectedAcademy,
+                  operating_days: settings.operating_days || [],
+                  time_interval: settings.time_interval || '1시간',
+                  day_time_settings: settings.day_time_settings || {},
+                  timetable_name: settings.timetable_name || null,
+                  classroom_ids: [],
+                  building_names: [{ id: 1, name: '1관' }],
+                  building_classrooms: { 1: [] }
+                });
+                console.log('✅ 강의실 설정 초기화 완료');
+              } catch (initError) {
+                console.warn('강의실 설정 초기화 실패:', initError);
+              }
             }
-          } catch (classroomError) {
-            console.warn('강의실 이름 로드 실패:', classroomError);
+          } 
+          // 레거시: building_names와 classroom_ids만 있는 경우
+          else if (settings.building_names && settings.classroom_ids) {
+            const buildingNames = Array.isArray(settings.building_names) 
+              ? settings.building_names 
+              : (settings.building_names.building1 || settings.building_names.building2 
+                  ? [{ id: 1, name: settings.building_names.building1 || '1관' }, ...(settings.building_names.building2 ? [{ id: 2, name: settings.building_names.building2 }] : [])]
+                  : [{ id: 1, name: '1관' }]);
+            
+            const classroomIds = settings.classroom_ids || [];
+            const classroomsPerBuilding = 6;
+            
+            loadedBuildings = buildingNames.map((building, index) => {
+              const startIndex = index * classroomsPerBuilding;
+              const endIndex = startIndex + classroomsPerBuilding;
+              const buildingClassroomIds = classroomIds.slice(startIndex, endIndex);
+              const buildingClassrooms = buildingClassroomIds.map(id => {
+                const found = allClassrooms.find(c => c.id === id);
+                return found ? found.name : '';
+              }).filter(name => name);
+              
+              return {
+                id: building.id,
+                name: building.name,
+                classrooms: buildingClassrooms.length > 0 ? buildingClassrooms : [''],
+                classroomIds: buildingClassroomIds.length > 0 ? buildingClassroomIds : [null]
+              };
+            });
+            
+            // 모든 관의 강의실이 비어있거나 유효하지 않으면 초기화
+            const hasValidClassrooms = loadedBuildings.some(b => 
+              b.classrooms.some(c => c && c.trim()) || 
+              b.classroomIds.some(id => id !== null)
+            );
+            
+            if (!hasValidClassrooms) {
+              console.log('⚠️ 저장된 강의실이 모두 비어있어 초기화합니다.');
+              loadedBuildings = [
+                { id: 1, name: '1관', classrooms: [''], classroomIds: [null] }
+              ];
+              // DB도 초기화
+              try {
+                await timetableSettingsService.save({
+                  academy_id: selectedAcademy,
+                  operating_days: settings.operating_days || [],
+                  time_interval: settings.time_interval || '1시간',
+                  day_time_settings: settings.day_time_settings || {},
+                  timetable_name: settings.timetable_name || null,
+                  classroom_ids: [],
+                  building_names: [{ id: 1, name: '1관' }],
+                  building_classrooms: { 1: [] }
+                });
+                console.log('✅ 강의실 설정 초기화 완료');
+              } catch (initError) {
+                console.warn('강의실 설정 초기화 실패:', initError);
+              }
+            }
           }
+          // classroom_ids만 있고 building_classrooms가 없는 경우
+          else if (settings.classroom_ids && Array.isArray(settings.classroom_ids) && settings.classroom_ids.length > 0) {
+            console.log('📋 classroom_ids만 있는 경우 처리:', settings.classroom_ids);
+            
+            // classroom_ids로 강의실 찾기
+            const foundClassrooms = settings.classroom_ids.map(id => {
+              const found = allClassrooms.find(c => c.id === id);
+              if (!found) {
+                console.warn(`⚠️ 강의실 ID ${id}를 찾을 수 없습니다.`);
+              }
+              return found;
+            }).filter(Boolean);
+            
+            console.log('📋 찾은 강의실:', foundClassrooms.map(c => ({ id: c.id, name: c.name })));
+            
+            if (foundClassrooms.length > 0) {
+              // 기본 관 이름 사용
+              const buildingName = settings.building_names && Array.isArray(settings.building_names) && settings.building_names.length > 0
+                ? settings.building_names[0].name
+                : (settings.building_names && settings.building_names.building1
+                    ? settings.building_names.building1
+                    : '1관');
+              
+              loadedBuildings = [{
+                id: 1,
+                name: buildingName,
+                classrooms: foundClassrooms.map(c => c.name),
+                classroomIds: foundClassrooms.map(c => c.id)
+              }];
+            } else {
+              // 강의실을 찾지 못한 경우 기본값
+              loadedBuildings = [
+                { id: 1, name: '1관', classrooms: [''], classroomIds: [null] }
+              ];
+            }
+          }
+          // 기본값
+          else {
+            console.log('📋 기본값 사용 (설정이 없음)');
+            loadedBuildings = [
+              { id: 1, name: '1관', classrooms: [''], classroomIds: [null] }
+            ];
+          }
+          
+          if (loadedBuildings.length > 0) {
+            setBuildings(loadedBuildings);
+            console.log('✅ 관별 강의실 로드:', loadedBuildings);
+          }
+        } catch (classroomError) {
+          console.warn('관별 강의실 로드 실패:', classroomError);
         }
         // 저장된 설정을 불러온 경우에는 기본적으로 읽기 전용 모드로 시작
         setIsTimetableEditMode(false);
@@ -456,24 +635,8 @@ const Settings = () => {
           if (localSettings.timetableName) {
             setTimetableName(localSettings.timetableName);
           }
-          if (localSettings.classroomIds && Array.isArray(localSettings.classroomIds) && localSettings.classroomIds.length > 0) {
-            setSelectedClassroomIds(localSettings.classroomIds);
-            console.log('✅ localStorage에서 강의실 ID 로드:', localSettings.classroomIds);
-            
-            // 강의실 이름도 로드
-            if (localSettings.classrooms && Array.isArray(localSettings.classrooms)) {
-              // 실제 저장된 강의실 개수만큼만 표시 (빈 문자열로 채우지 않음)
-              const validClassrooms = localSettings.classrooms.filter(c => c && c.trim());
-              if (validClassrooms.length > 0) {
-                setClassrooms(validClassrooms);
-              } else {
-                // 강의실이 없으면 최소 하나의 빈 입력창 표시
-                setClassrooms(['']);
-                setSelectedClassroomIds([null]);
-              }
-              console.log('✅ localStorage에서 강의실 이름 로드:', localSettings.classrooms);
-            }
-          }
+          // localStorage의 classroomIds와 classrooms는 buildings 구조로 마이그레이션되었으므로 무시
+          // buildings는 위에서 이미 로드됨
         }
         // 로컬 스토리지에서 설정을 불러온 경우에도 읽기 전용 모드로 시작
         setIsTimetableEditMode(false);
@@ -489,20 +652,8 @@ const Settings = () => {
           if (settings.dayTimeSettings) setDayTimeSettings(settings.dayTimeSettings);
           if (settings.operatingDays) setOperatingDays(settings.operatingDays);
           if (settings.timetableName) setTimetableName(settings.timetableName);
-          if (settings.classroomIds && Array.isArray(settings.classroomIds)) {
-            setSelectedClassroomIds(settings.classroomIds);
-          }
-          if (settings.classrooms && Array.isArray(settings.classrooms)) {
-            // 실제 저장된 강의실 개수만큼만 표시 (빈 문자열로 채우지 않음)
-            const validClassrooms = settings.classrooms.filter(c => c && c.trim());
-            if (validClassrooms.length > 0) {
-              setClassrooms(validClassrooms);
-            } else {
-              // 강의실이 없으면 최소 하나의 빈 입력창 표시
-              setClassrooms(['']);
-              setSelectedClassroomIds([null]);
-            }
-          }
+          // localStorage의 classroomIds와 classrooms는 buildings 구조로 마이그레이션되었으므로 무시
+          // buildings는 위에서 이미 로드됨
           // 폴백으로 로컬 설정을 불러온 경우에도 읽기 전용 모드로 시작
           setIsTimetableEditMode(false);
         }
@@ -604,14 +755,29 @@ const Settings = () => {
     if (!academyId) {
       console.log('⚠️ selectedAcademy가 없습니다. 학원 목록을 로드합니다...');
       try {
-        const response = await academyService.getAll();
-        const academies = response.data.academies || [];
-        if (academies.length > 0) {
-          academyId = academies[0].id;
-          console.log('✅ 학원 자동 선택:', academyId);
+        // academy context에서 학원 ID 가져오기
+        if (academy && academy.id) {
+          academyId = academy.id;
+          console.log('✅ academy context에서 학원 ID 가져옴:', academyId);
           shouldSetAcademy = true;
+        } else if (supabase) {
+          // Supabase에서 학원 목록 조회
+          const { data: academies, error } = await supabase
+            .from('academies')
+            .select('id')
+            .limit(1);
+          
+          if (!error && academies && academies.length > 0) {
+            academyId = academies[0].id;
+            console.log('✅ Supabase에서 학원 자동 선택:', academyId);
+            shouldSetAcademy = true;
+          } else {
+            alert('등록된 학원이 없습니다. 먼저 학원을 등록해주세요.');
+            return;
+          }
         } else {
-          alert('등록된 학원이 없습니다. 먼저 학원을 등록해주세요.');
+          alert('학원 정보를 불러올 수 없습니다.');
+          console.error('❌ Supabase 클라이언트를 사용할 수 없습니다.');
           return;
         }
       } catch (error) {
@@ -901,228 +1067,13 @@ const Settings = () => {
       const response = await classroomService.getAll(selectedAcademy);
       const classroomList = response.data.classrooms || [];
       setAvailableClassrooms(classroomList);
-      
-      // 1단계: DB의 시간표 설정(classroom_ids) 우선 사용
-      try {
-        const settingsResponse = await timetableSettingsService.get(selectedAcademy);
-        const settings = settingsResponse.settings;
-        if (settings && Array.isArray(settings.classroom_ids) && settings.classroom_ids.length > 0) {
-          const selectedNames = settings.classroom_ids
-            .map(id => {
-              const found = classroomList.find(c => c.id === id);
-              return found ? found.name : '';
-            })
-            .filter(name => name);
-          
-          if (selectedNames.length > 0) {
-            console.log('✅ DB 시간표 설정에서 강의실 로드 (Settings):', selectedNames);
-            setClassrooms(selectedNames);
-            // 이름으로 다시 ID 매칭 (혹시 일부 ID가 빠졌을 수 있으므로)
-            const ids = selectedNames.map(name => {
-              const found = classroomList.find(c => c.name === name);
-              return found ? found.id : null;
-            });
-            setSelectedClassroomIds(ids);
-            return;
-          }
-        }
-      } catch (settingsError) {
-        console.warn('시간표 설정 로드 실패(무시) - localStorage로 폴백 예정:', settingsError);
-      }
-      
-      // 2단계: localStorage - "강의실 이름"을 먼저 사용
-      try {
-        const saved = localStorage.getItem('timetableSettings');
-        if (saved) {
-          const localSettings = JSON.parse(saved);
-          
-          // 우선 classrooms(이름 배열)를 사용
-          if (Array.isArray(localSettings.classrooms) && localSettings.classrooms.length > 0) {
-            const names = localSettings.classrooms;
-            console.log('✅ localStorage에서 강의실 이름 로드 (Settings):', names);
-            setClassrooms(names);
-            
-            // 이름을 DB 강의실과 매칭해서 ID 설정 (없으면 null)
-            const ids = names.map(name => {
-              const found = classroomList.find(c => c.name === name);
-              return found ? found.id : null;
-            });
-            setSelectedClassroomIds(ids);
-            return;
-          }
-          
-          // classrooms가 없고 classroomIds만 있는 오래된 데이터인 경우: ID로 이름 매칭
-          if (Array.isArray(localSettings.classroomIds) && localSettings.classroomIds.length > 0) {
-            const selectedNames = localSettings.classroomIds
-              .map(id => {
-                const found = classroomList.find(c => c.id === id);
-                return found ? found.name : '';
-              })
-              .filter(name => name);
-            
-            if (selectedNames.length > 0) {
-              console.log('✅ localStorage에서 강의실 ID 로드 (Settings):', selectedNames);
-              setClassrooms(selectedNames);
-              const ids = selectedNames.map(name => {
-                const found = classroomList.find(c => c.name === name);
-                return found ? found.id : null;
-              });
-              setSelectedClassroomIds(ids);
-              return;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('localStorage 시간표 설정 파싱 실패:', e);
-      }
-      
-      // 3단계: 아무 설정도 없으면 기본값 하나만 표시
-      setClassrooms(['']);
-      setSelectedClassroomIds([null]);
+      // buildings 구조는 loadTimetableSettings에서 처리하므로 여기서는 availableClassrooms만 업데이트
     } catch (error) {
       console.error('강의실 목록 로드 실패:', error);
     }
   };
 
 
-  const handleLogoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setAcademyLogo(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleLogoDrop = (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      setAcademyLogo(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // 학원 정보 저장 기능
-  const handleSaveAcademy = async () => {
-    try {
-      // 학원 이름 검증
-      if (!academyName || !academyName.trim()) {
-        alert('학원 이름을 입력해주세요.');
-        return;
-      }
-
-      // 기존 코드 유지 (재생성 불가)
-      // 코드가 없을 때만 새로 생성 (최초 생성 시에만)
-      let codeToSave = academyCode;
-      if (!codeToSave || !codeToSave.trim()) {
-        codeToSave = generateAcademyCode();
-        setAcademyCode(codeToSave);
-      }
-      // 이미 코드가 있으면 기존 코드 유지 (재생성 불가)
-
-      // 빈 문자열을 null로 변환
-      const data = {
-        name: academyName.trim(),
-        address: academyAddress && academyAddress.trim() ? academyAddress.trim() : null,
-        floor: academyFloor && academyFloor.trim() ? academyFloor.trim() : null,
-        logo_url: logoPreview && logoPreview.trim() ? logoPreview.trim() : null,
-        code: codeToSave && codeToSave.trim() ? codeToSave.trim() : null,
-      };
-
-      console.log('전송할 학원 데이터:', data); // 디버깅용
-      console.log('현재 selectedAcademy:', selectedAcademy);
-
-      let savedAcademy;
-      const isNewAcademy = !selectedAcademy;
-      
-      if (selectedAcademy) {
-        console.log('기존 학원 업데이트 시도:', selectedAcademy);
-        const updateResponse = await academyService.update(selectedAcademy, data);
-        console.log('업데이트 응답:', updateResponse.data);
-        savedAcademy = updateResponse.data.academy;
-      } else {
-        console.log('새 학원 생성 시도');
-        const createResponse = await academyService.create(data);
-        console.log('생성 응답:', createResponse.data);
-        savedAcademy = createResponse.data.academy;
-        
-        if (!savedAcademy || !savedAcademy.id) {
-          throw new Error('학원 생성 후 응답 데이터가 올바르지 않습니다.');
-        }
-      }
-      
-      // 저장된 데이터로 즉시 상태 업데이트
-      if (savedAcademy && savedAcademy.id) {
-        console.log('✅ 저장 성공! 저장된 학원 정보:', savedAcademy);
-        console.log('학원 ID:', savedAcademy.id);
-        
-        // 상태 업데이트
-        setAcademyName(savedAcademy.name || '');
-        setAcademyAddress(savedAcademy.address || '');
-        setAcademyFloor(savedAcademy.floor || '');
-        setLogoPreview(savedAcademy.logo_url || '');
-        setAcademyCode(savedAcademy.code || '');
-        setSelectedAcademy(savedAcademy.id);
-        
-        console.log('상태 업데이트 완료. selectedAcademy:', savedAcademy.id);
-        
-        // 전역 Context 업데이트 (네비게이션바 자동 업데이트)
-        updateAcademy(savedAcademy);
-        console.log('네비게이션바 업데이트 완료');
-        
-        // 학원이 새로 생성되었거나 업데이트된 경우, 관련 데이터 로드
-        try {
-          await loadSubjects();
-          await loadClassrooms();
-          console.log('과목/강의실 로드 완료');
-        } catch (error) {
-          console.warn('과목/강의실 로드 실패:', error);
-        }
-        
-        alert(`학원 정보가 ${isNewAcademy ? '등록' : '저장'}되었습니다.`);
-        
-        // 저장 후 편집 모드 종료
-        setIsEditMode(false);
-      } else {
-        throw new Error('저장된 학원 데이터가 올바르지 않습니다.');
-      }
-    } catch (error) {
-      console.error('학원 정보 저장 실패:', error);
-      console.error('에러 응답 전체:', error.response?.data);
-      console.error('에러 상태 코드:', error.response?.status);
-      console.error('에러 메시지:', error.message);
-      
-      // 에러 메시지 추출
-      let errorMessage = '저장에 실패했습니다.';
-      if (error.response?.data) {
-        // 에러 응답의 모든 내용을 로깅
-        console.error('에러 응답 상세:', JSON.stringify(error.response.data, null, 2));
-        
-        if (typeof error.response.data.error === 'string') {
-          errorMessage = error.response.data.error;
-        } else if (error.response.data.error?.message) {
-          errorMessage = error.response.data.error.message;
-        } else if (error.response.data.message) {
-          errorMessage = error.response.data.message;
-        } else {
-          // 에러 객체 전체를 문자열로 변환
-          errorMessage = JSON.stringify(error.response.data);
-        }
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(`저장에 실패했습니다: ${errorMessage}`);
-    }
-  };
 
   const handleAddSubject = async () => {
     if (!subjectName.trim()) {
@@ -1135,15 +1086,30 @@ const Settings = () => {
     if (!academyId) {
       console.log('⚠️ selectedAcademy가 없습니다. 학원 목록을 로드합니다...');
       try {
-        const response = await academyService.getAll();
-        const academies = response.data.academies || [];
-        if (academies.length > 0) {
-          academyId = academies[0].id;
-          console.log('✅ 학원 자동 선택:', academyId);
+        // academy context에서 학원 ID 가져오기
+        if (academy && academy.id) {
+          academyId = academy.id;
+          console.log('✅ academy context에서 학원 ID 가져옴:', academyId);
           setSelectedAcademy(academyId);
+        } else if (supabase) {
+          // Supabase에서 학원 목록 조회
+          const { data: academies, error } = await supabase
+            .from('academies')
+            .select('id')
+            .limit(1);
+          
+          if (!error && academies && academies.length > 0) {
+            academyId = academies[0].id;
+            console.log('✅ Supabase에서 학원 자동 선택:', academyId);
+            setSelectedAcademy(academyId);
+          } else {
+            alert('등록된 학원이 없습니다. 테스트를 위해 Supabase에 학원을 먼저 생성해주세요.');
+            console.error('❌ 등록된 학원이 없습니다.');
+            return;
+          }
         } else {
-          alert('등록된 학원이 없습니다. 테스트를 위해 Supabase에 학원을 먼저 생성해주세요.');
-          console.error('❌ 등록된 학원이 없습니다.');
+          alert('학원 정보를 불러올 수 없습니다.');
+          console.error('❌ Supabase 클라이언트를 사용할 수 없습니다.');
           return;
         }
       } catch (error) {
@@ -1309,11 +1275,22 @@ const Settings = () => {
 
   const toggleDay = (day) => {
     if (!isTimetableEditMode) return;
-    setOperatingDays(prev =>
-      prev.includes(day)
+    
+    // 요일 순서 정의 (월화수목금토일)
+    const dayOrder = ['월', '화', '수', '목', '금', '토', '일'];
+    
+    setOperatingDays(prev => {
+      const newDays = prev.includes(day)
         ? prev.filter(d => d !== day)
-        : [...prev, day]
-    );
+        : [...prev, day];
+      
+      // 요일 순서대로 정렬
+      return newDays.sort((a, b) => {
+        const indexA = dayOrder.indexOf(a);
+        const indexB = dayOrder.indexOf(b);
+        return indexA - indexB;
+      });
+    });
   };
 
   const handleDayTimeChange = (day, field, value) => {
@@ -1327,80 +1304,135 @@ const Settings = () => {
     }));
   };
 
-  const handleClassroomChange = async (index, value) => {
+  // 이전 버전의 handleClassroomChange, handleDeleteClassroom, handleAddClassroom 함수들은
+  // buildings 구조로 변경되면서 handleBuildingClassroomChange, handleDeleteBuildingClassroom,
+  // handleAddBuildingClassroom으로 대체되었습니다.
+
+  const handleAddBuilding = () => {
     if (!isTimetableEditMode) return;
-    const newClassrooms = [...classrooms];
-    newClassrooms[index] = value;
-    setClassrooms(newClassrooms);
+    const newId = buildings.length > 0 ? Math.max(...buildings.map(b => b.id)) + 1 : 1;
+    setBuildings([...buildings, { id: newId, name: `${newId}관`, classrooms: [''], classroomIds: [null] }]);
+  };
+
+  const handleBuildingNameChange = (buildingIndex, value) => {
+    if (!isTimetableEditMode) return;
+    const updated = [...buildings];
+    updated[buildingIndex] = { ...updated[buildingIndex], name: value };
+    setBuildings(updated);
+  };
+
+  const handleDeleteBuilding = (buildingIndex) => {
+    if (!isTimetableEditMode) return;
+    if (buildings.length <= 1) {
+      alert('최소 하나의 관은 유지해야 합니다.');
+      return;
+    }
+    const updated = buildings.filter((_, i) => i !== buildingIndex);
+    setBuildings(updated);
+  };
+
+  const handleBuildingClassroomChange = async (buildingIndex, classroomIndex, value) => {
+    if (!isTimetableEditMode) return;
+    const updated = [...buildings];
+    const building = updated[buildingIndex];
+    const newClassrooms = [...building.classrooms];
+    const newClassroomIds = [...building.classroomIds];
+    
+    newClassrooms[classroomIndex] = value;
+    updated[buildingIndex] = { ...building, classrooms: newClassrooms };
+    setBuildings(updated);
     
     // 입력한 이름으로 강의실 찾기
     if (value.trim()) {
       const foundClassroom = availableClassrooms.find(c => c.name === value.trim());
       if (foundClassroom) {
-        // 강의실을 찾았으면 ID 저장
-        const newIds = [...selectedClassroomIds];
-        newIds[index] = foundClassroom.id;
-        setSelectedClassroomIds(newIds);
+        newClassroomIds[classroomIndex] = foundClassroom.id;
+        updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
+        setBuildings(updated);
         console.log('✅ 강의실 선택:', foundClassroom.id, foundClassroom.name);
       } else {
-        // 강의실을 찾지 못했으면 ID 제거
-        const newIds = [...selectedClassroomIds];
-        newIds[index] = null;
-        setSelectedClassroomIds(newIds);
+        newClassroomIds[classroomIndex] = null;
+        updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
+        setBuildings(updated);
         console.warn('⚠️ 강의실을 찾을 수 없습니다:', value);
       }
     } else {
-      // 빈 값이면 ID 제거
-      const newIds = [...selectedClassroomIds];
-      newIds[index] = null;
-      setSelectedClassroomIds(newIds);
+      newClassroomIds[classroomIndex] = null;
+      updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
+      setBuildings(updated);
     }
   };
 
-  const handleDeleteClassroom = async (index) => {
+  const handleAddBuildingClassroom = (buildingIndex) => {
     if (!isTimetableEditMode) return;
+    const updated = [...buildings];
+    const building = updated[buildingIndex];
     
-    const classroomIdToRemove = selectedClassroomIds[index];
-    const classroomName = classrooms[index];
+    // 빈 강의실 입력 필드는 제외하고 실제 강의실 개수 확인 (ID가 있는 것만 카운트)
+    const actualClassroomCount = building.classroomIds.filter(id => id !== null).length;
     
-    // 해당 강의실을 사용하는 수업이 있는지 확인
+    if (actualClassroomCount >= 6) {
+      alert('한 관당 최대 6개의 강의실만 추가할 수 있습니다.');
+      return;
+    }
+    
+    // 빈 선택 필드가 있으면 추가하지 않음 (드롭다운에서 선택하지 않은 경우)
+    const hasUnselectedField = building.classrooms.some((c, idx) => {
+      const id = building.classroomIds[idx];
+      return !c || (!c.trim() && id === null);
+    });
+    if (hasUnselectedField) {
+      alert('빈 강의실 선택 필드를 먼저 선택해주세요.');
+      return;
+    }
+    
+    // 새 드롭다운 필드 추가 (빈 값으로 시작)
+    updated[buildingIndex] = {
+      ...building,
+      classrooms: [...building.classrooms, ''],
+      classroomIds: [...building.classroomIds, null]
+    };
+    setBuildings(updated);
+  };
+
+  const handleDeleteBuildingClassroom = (buildingIndex, classroomIndex) => {
+    if (!isTimetableEditMode) return;
+    const updated = [...buildings];
+    const building = updated[buildingIndex];
+    
+    const classroomIdToRemove = building.classroomIds[classroomIndex];
+    const classroomName = building.classrooms[classroomIndex];
+    
+    // 확인 메시지
     if (classroomIdToRemove && classroomName && classroomName.trim()) {
-      const confirmMessage = `"${classroomName}" 강의실을 삭제하시겠습니까?\n\n이 강의실을 사용하는 수업이 있다면 시간표에서 표시되지 않을 수 있습니다.\n\n저장하면 이 강의실이 시간표 설정에서 제거됩니다.`;
+      const confirmMessage = `"${classroomName}" 강의실을 삭제하시겠습니까?\n\n이 강의실을 사용하는 수업이 있다면 시간표에서 표시되지 않을 수 있습니다.`;
       if (!window.confirm(confirmMessage)) {
         return;
       }
     } else if (classroomName && classroomName.trim()) {
-      // ID는 없지만 이름이 있는 경우 (아직 저장되지 않은 강의실)
       if (!window.confirm(`"${classroomName}" 강의실 입력을 삭제하시겠습니까?`)) {
         return;
       }
     }
     
-    // 배열에서 완전히 제거 (빈 문자열로 남기지 않음)
-    const newClassrooms = classrooms.filter((_, i) => i !== index);
-    const newIds = selectedClassroomIds.filter((_, i) => i !== index);
+    const newClassrooms = building.classrooms.filter((_, i) => i !== classroomIndex);
+    const newClassroomIds = building.classroomIds.filter((_, i) => i !== classroomIndex);
     
     // 모든 강의실이 삭제되면 최소 하나의 빈 입력창은 유지
     if (newClassrooms.length === 0) {
-      setClassrooms(['']);
-      setSelectedClassroomIds([null]);
+      updated[buildingIndex] = {
+        ...building,
+        classrooms: [''],
+        classroomIds: [null]
+      };
     } else {
-      setClassrooms(newClassrooms);
-      setSelectedClassroomIds(newIds);
+      updated[buildingIndex] = {
+        ...building,
+        classrooms: newClassrooms,
+        classroomIds: newClassroomIds
+      };
     }
-    
-    console.log('✅ 강의실 삭제 완료:', { 
-      삭제된강의실: classroomName,
-      남은강의실수: newClassrooms.length || 1 // 빈 입력창 하나는 항상 있음
-    });
-  };
-
-  const handleAddClassroom = () => {
-    if (!isTimetableEditMode) return;
-    if (classrooms.length < 10) {
-      setClassrooms([...classrooms, '']);
-      setSelectedClassroomIds([...selectedClassroomIds, null]);
-    }
+    setBuildings(updated);
   };
 
   const handleSaveTimetable = async () => {
@@ -1409,15 +1441,30 @@ const Settings = () => {
     if (!academyId) {
       console.log('⚠️ selectedAcademy가 없습니다. 학원 목록을 로드합니다...');
       try {
-        const response = await academyService.getAll();
-        const academies = response.data.academies || [];
-        if (academies.length > 0) {
-          academyId = academies[0].id;
-          console.log('✅ 학원 자동 선택:', academyId);
+        // academy context에서 학원 ID 가져오기
+        if (academy && academy.id) {
+          academyId = academy.id;
+          console.log('✅ academy context에서 학원 ID 가져옴:', academyId);
           setSelectedAcademy(academyId);
+        } else if (supabase) {
+          // Supabase에서 학원 목록 조회
+          const { data: academies, error } = await supabase
+            .from('academies')
+            .select('id')
+            .limit(1);
+          
+          if (!error && academies && academies.length > 0) {
+            academyId = academies[0].id;
+            console.log('✅ Supabase에서 학원 자동 선택:', academyId);
+            setSelectedAcademy(academyId);
+          } else {
+            alert('등록된 학원이 없습니다. 먼저 학원을 등록해주세요.');
+            console.error('❌ 등록된 학원이 없습니다.');
+            return;
+          }
         } else {
-          alert('등록된 학원이 없습니다. 먼저 학원을 등록해주세요.');
-          console.error('❌ 등록된 학원이 없습니다.');
+          alert('학원 정보를 불러올 수 없습니다.');
+          console.error('❌ Supabase 클라이언트를 사용할 수 없습니다.');
           return;
         }
       } catch (error) {
@@ -1428,101 +1475,133 @@ const Settings = () => {
     }
 
     try {
-      // 강의실 저장 및 ID 수집
-      // 실제 입력된 강의실만 처리 (빈 문자열 제외)
-      const validClassroomIds = [];
-      const validClassroomNames = [];
+      // 관별 강의실 저장 및 ID 수집을 위한 초기화
+      const processedBuildings = [];
+      const allClassroomIds = [];
       
       // 먼저 모든 강의실 목록 가져오기
       const allClassroomsResponse = await classroomService.getAll(academyId);
       const allClassrooms = allClassroomsResponse.data.classrooms || [];
       
-      console.log('📝 저장할 강의실 입력값:', classrooms);
-      console.log('📝 저장된 강의실 ID:', selectedClassroomIds);
+      console.log('📝 저장할 관별 강의실:', buildings);
       
-      // 각 강의실 입력 필드에 대해 처리 (인덱스 유지)
-      for (let i = 0; i < classrooms.length; i++) {
-        const name = classrooms[i]?.trim();
-        if (!name) continue; // 빈 값은 건너뛰기
+      // 각 관에 대해 처리
+      for (let buildingIndex = 0; buildingIndex < buildings.length; buildingIndex++) {
+        const building = buildings[buildingIndex];
+        const validClassroomIds = [];
+        const validClassroomNames = [];
         
-        const existingId = selectedClassroomIds[i];
-        
-        console.log(`🔍 강의실 처리 중 [${i}]:`, { name, existingId });
-        
-        // 이미 ID가 있고 해당 강의실이 존재하는지 확인
-        if (existingId && allClassrooms.some(c => c.id === existingId)) {
-          const existingClassroom = allClassrooms.find(c => c.id === existingId);
-          // 이름이 일치하는지 확인
-          if (existingClassroom.name === name) {
-            validClassroomIds.push(existingId);
-            validClassroomNames.push(name);
-            console.log('✅ 기존 강의실 사용:', existingId, name);
-            continue;
-          } else {
-            console.warn(`⚠️ ID는 있지만 이름이 다릅니다. 이름으로 다시 찾습니다.`, {
-              저장된ID: existingId,
-              저장된이름: existingClassroom.name,
-              입력한이름: name
-            });
-          }
-        }
-        
-        // 이름으로 강의실 찾기
-        let foundClassroom = allClassrooms.find(c => c.name === name);
-        
-        if (!foundClassroom) {
-          // 강의실이 없으면 생성
-          try {
-            console.log(`📝 강의실 생성 시도: ${name}`);
-            const createResponse = await classroomService.create({
-              name: name,
-              academy_id: academyId,
-              capacity: 20,
-            });
-            
-            if (createResponse.data?.classroom) {
-              foundClassroom = createResponse.data.classroom;
-              console.log(`✅ 강의실 생성 완료: ${name}`, foundClassroom.id);
-              // 생성 후 목록에 추가
-              allClassrooms.push(foundClassroom);
+        // 해당 관의 각 강의실에 대해 처리
+        for (let i = 0; i < building.classrooms.length; i++) {
+          const name = building.classrooms[i]?.trim();
+          if (!name) continue; // 빈 값은 건너뛰기
+          
+          const existingId = building.classroomIds[i];
+          
+          console.log(`🔍 강의실 처리 중 [관${building.id}][${i}]:`, { name, existingId });
+          
+          // 이미 ID가 있고 해당 강의실이 존재하는지 확인
+          if (existingId && allClassrooms.some(c => c.id === existingId)) {
+            const existingClassroom = allClassrooms.find(c => c.id === existingId);
+            // 이름이 일치하는지 확인
+            if (existingClassroom.name === name) {
+              validClassroomIds.push(existingId);
+              validClassroomNames.push(name);
+              allClassroomIds.push(existingId);
+              console.log('✅ 기존 강의실 사용:', existingId, name);
+              continue;
+            } else {
+              console.warn(`⚠️ ID는 있지만 이름이 다릅니다. 이름으로 다시 찾습니다.`, {
+                저장된ID: existingId,
+                저장된이름: existingClassroom.name,
+                입력한이름: name
+              });
             }
-          } catch (classroomError) {
-            console.warn(`⚠️ 강의실 생성 실패: ${name}`, classroomError);
-            // 생성 실패해도 계속 진행
-          }
-        }
-        
-        if (foundClassroom && foundClassroom.id) {
-          // UUID 형식 검증
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (!uuidRegex.test(foundClassroom.id)) {
-            console.error(`❌ 잘못된 강의실 ID 형식: ${foundClassroom.id} (강의실: ${name})`);
-            continue; // 잘못된 ID는 건너뛰기
           }
           
-          validClassroomIds.push(foundClassroom.id);
-          validClassroomNames.push(name);
-          // selectedClassroomIds 업데이트 (원래 인덱스 유지)
-          const newIds = [...selectedClassroomIds];
-          newIds[i] = foundClassroom.id;
-          setSelectedClassroomIds(newIds);
-          console.log('✅ 강의실 ID 저장:', foundClassroom.id, name);
-        } else {
-          console.warn(`⚠️ 강의실을 찾거나 생성할 수 없습니다: ${name}`);
+          // 이름으로 강의실 찾기
+          let foundClassroom = allClassrooms.find(c => c.name === name);
+          
+          if (!foundClassroom) {
+            // 강의실이 없으면 생성
+            try {
+              console.log(`📝 강의실 생성 시도: ${name}`);
+              const createResponse = await classroomService.create({
+                name: name,
+                academy_id: academyId,
+                capacity: 20,
+              });
+              
+              if (createResponse.data?.classroom) {
+                foundClassroom = createResponse.data.classroom;
+                console.log(`✅ 강의실 생성 완료: ${name}`, foundClassroom.id);
+                // 생성 후 목록에 추가
+                allClassrooms.push(foundClassroom);
+              }
+            } catch (classroomError) {
+              console.warn(`⚠️ 강의실 생성 실패: ${name}`, classroomError);
+              // 생성 실패해도 계속 진행
+            }
+          }
+          
+          if (foundClassroom && foundClassroom.id) {
+            // UUID 형식 검증
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!uuidRegex.test(foundClassroom.id)) {
+              console.error(`❌ 잘못된 강의실 ID 형식: ${foundClassroom.id} (강의실: ${name})`);
+              continue; // 잘못된 ID는 건너뛰기
+            }
+            
+            validClassroomIds.push(foundClassroom.id);
+            validClassroomNames.push(name);
+            allClassroomIds.push(foundClassroom.id);
+            
+            // buildings 상태 업데이트
+            const updatedBuildings = [...buildings];
+            const updatedIds = [...building.classroomIds];
+            updatedIds[i] = foundClassroom.id;
+            updatedBuildings[buildingIndex] = {
+              ...building,
+              classrooms: [...building.classrooms],
+              classroomIds: updatedIds
+            };
+            setBuildings(updatedBuildings);
+            
+            console.log('✅ 강의실 ID 저장:', foundClassroom.id, name);
+          } else {
+            console.warn(`⚠️ 강의실을 찾거나 생성할 수 없습니다: ${name}`);
+          }
         }
+        
+        // 관별 강의실 정보 저장
+        processedBuildings.push({
+          id: building.id,
+          name: building.name,
+          classroomIds: validClassroomIds,
+          classrooms: validClassroomNames
+        });
+        
+        console.log(`✅ 관 ${building.id} (${building.name}) 강의실 처리 완료:`, {
+          IDs: validClassroomIds,
+          Names: validClassroomNames
+        });
       }
       
-      console.log('✅ 최종 저장할 강의실:', {
-        IDs: validClassroomIds,
-        Names: validClassroomNames
-      });
+      console.log('✅ 최종 저장할 관별 강의실:', processedBuildings);
+      console.log('✅ 전체 강의실 ID 목록:', allClassroomIds);
 
+      // 모든 관의 강의실이 비어있으면 초기화 상태로 저장
+      const hasAnyClassrooms = processedBuildings.some(b => 
+        b.classroomIds && b.classroomIds.length > 0 && b.classroomIds.some(id => id !== null)
+      );
+      
+      
       // 기존 설정에서 제거된 강의실 확인 (기존 수업과의 충돌 방지)
       try {
         const existingSettings = await timetableSettingsService.get(academyId);
         if (existingSettings.settings && existingSettings.settings.classroom_ids) {
           const oldClassroomIds = existingSettings.settings.classroom_ids;
-          const removedClassroomIds = oldClassroomIds.filter(id => !validClassroomIds.includes(id));
+          const removedClassroomIds = oldClassroomIds.filter(id => !allClassroomIds.includes(id));
           
           if (removedClassroomIds.length > 0) {
             console.log('⚠️ 제거된 강의실 ID:', removedClassroomIds);
@@ -1560,8 +1639,8 @@ const Settings = () => {
         timeInterval,
         operatingDays,
         timetableName,
-        classroomIds: validClassroomIds,
-        classroomsCount: validClassroomIds.length
+        classroomIds: allClassroomIds,
+        classroomsCount: allClassroomIds.length
       });
       
       const response = await timetableSettingsService.save({
@@ -1570,24 +1649,31 @@ const Settings = () => {
         time_interval: timeInterval,
         day_time_settings: dayTimeSettings,
         timetable_name: timetableName || null,
-        classroom_ids: validClassroomIds,
+        classroom_ids: allClassroomIds,
+        building_names: processedBuildings.map(b => ({ id: b.id, name: b.name })),
+        building_classrooms: processedBuildings.reduce((acc, b) => {
+          acc[b.id] = b.classroomIds;
+          return acc;
+        }, {})
       });
 
       console.log('✅ 시간표 설정 저장 성공:', response);
 
       // ---- 프론트 상태를 사용자가 입력한 값으로 즉시 동기화 ----
-      // DB까지 저장이 성공했으므로, 지금 화면의 강의실 입력칸에는
+      // DB까지 저장이 성공했으므로, 지금 화면의 관별 강의실 입력칸에는
       // 방금 저장한 강의실 이름/ID를 그대로 보여주도록 고정한다.
-      // 최소 하나의 입력창은 항상 유지
-      if (validClassroomNames.length === 0) {
-        setClassrooms(['']);
-        setSelectedClassroomIds([null]);
-      } else {
-        setClassrooms(validClassroomNames);
-        setSelectedClassroomIds(validClassroomIds);
-      }
+      const updatedBuildings = processedBuildings.map(b => ({
+        id: b.id,
+        name: b.name,
+        classrooms: b.classrooms.length > 0 ? b.classrooms : [''],
+        classroomIds: b.classroomIds.length > 0 ? b.classroomIds : [null]
+      }));
+      setBuildings(updatedBuildings);
       // 저장 직후에는 시간표/강의실 섹션을 읽기 전용 모드로 전환
       setIsTimetableEditMode(false);
+      
+      // 새로 생성된 강의실이 드롭다운에 나타나도록 강의실 목록 다시 로드
+      await loadClassrooms();
 
       // localStorage에도 저장 (마이그레이션 지원)
       try {
@@ -1596,8 +1682,8 @@ const Settings = () => {
           operatingDays,
           dayTimeSettings,
           timetableName,
-          classroomIds: validClassroomIds,
-          classrooms: validClassroomNames,
+          classroomIds: allClassroomIds,
+          classrooms: processedBuildings.flatMap(b => b.classrooms),
         };
         localStorage.setItem('timetableSettings', JSON.stringify(localSettings));
         console.log('✅ localStorage에도 저장 완료');
@@ -1620,7 +1706,7 @@ const Settings = () => {
         const savedClassroomIds = savedSettings.settings?.classroom_ids || [];
         
         console.log('📋 DB에 실제 저장된 강의실 ID:', savedClassroomIds);
-        console.log('📋 저장 시도한 강의실 ID:', validClassroomIds);
+        console.log('📋 저장 시도한 강의실 ID:', allClassroomIds);
         
         // 저장된 ID로 실제 강의실 찾기
         const actualClassrooms = savedClassroomIds
@@ -1629,26 +1715,11 @@ const Settings = () => {
         
         console.log('✅ 실제 DB에서 찾은 강의실:', actualClassrooms.map(c => ({ id: c.id, name: c.name })));
         
-        if (actualClassrooms.length > 0) {
-          // 저장된 강의실로 상태 업데이트 (실제 DB ID와 이름 사용)
-          const updatedClassroomNames = actualClassrooms.map(c => c.name);
-          const updatedClassroomIds = actualClassrooms.map(c => c.id);
-          
-          // 상태 업데이트 - 배열 길이를 맞춰서 업데이트
-          setClassrooms(updatedClassroomNames);
-          setSelectedClassroomIds(updatedClassroomIds);
-          
-          console.log('✅ 강의실 상태 업데이트 완료:', {
-            classrooms: updatedClassroomNames,
-            selectedClassroomIds: updatedClassroomIds,
-            개수: updatedClassroomNames.length
-          });
-        } else {
-          // 저장된 강의실이 없어도 최소 하나의 입력창은 유지
-          console.warn('⚠️ 저장된 강의실을 찾을 수 없습니다. 빈 입력창을 표시합니다.');
-          setClassrooms(['']);
-          setSelectedClassroomIds([null]);
-        }
+        // buildings 구조는 이미 위에서 업데이트했으므로 여기서는 로그만 출력
+        console.log('✅ 강의실 상태 업데이트 완료:', {
+          buildings: updatedBuildings,
+          개수: allClassroomIds.length
+        });
         
         // 다른 설정도 다시 로드하여 UI 동기화
         if (savedSettings.settings) {
@@ -1872,133 +1943,694 @@ const Settings = () => {
     );
   };
 
+  // 사용자 정보 로드 (Supabase users 테이블에서 최신 정보 가져오기)
+  useEffect(() => {
+    const loadUserInfo = async () => {
+      setIsLoadingUserInfo(true);
+      
+      // user가 없으면 기본값 설정
+      if (!user) {
+        setUserName('플라이 관리자');
+        setUserEmail('');
+        setUserPhone('');
+        setIsLoadingUserInfo(false);
+        return;
+      }
+
+      // user.id가 있으면 Supabase에서 직접 조회
+      if (user.id) {
+        try {
+          console.log('📖 사용자 정보 로드 시작:', user.id);
+          
+          if (!supabase) {
+            console.warn('Supabase 클라이언트를 사용할 수 없습니다. 로컬 정보 사용');
+            setUserName(user.name || '플라이 관리자');
+            setUserEmail(user.email || '');
+            setUserPhone(user.phone || '');
+            setIsLoadingUserInfo(false);
+            return;
+          }
+
+          // Supabase에서 직접 조회
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('id, name, email, phone, academy_code')
+            .eq('id', user.id)
+            .single();
+
+          if (error) {
+            console.error('사용자 정보 로드 실패:', error);
+            // 에러 발생 시 로컬 user 정보 사용
+            setUserName(user.name || '플라이 관리자');
+            setUserEmail(user.email || '');
+            setUserPhone(user.phone || '');
+          } else if (userData) {
+            console.log('✅ 사용자 정보 로드 성공:', userData);
+            setUserName(userData.name || '플라이 관리자');
+            setUserEmail(userData.email || '');
+            setUserPhone(userData.phone || '');
+            console.log('사용자 정보 설정 완료:', {
+              name: userData.name,
+              email: userData.email,
+              phone: userData.phone,
+              academy_code: userData.academy_code
+            });
+          } else {
+            // 데이터가 없으면 로컬 user 정보 사용
+            console.warn('DB에 사용자 정보가 없음, 로컬 정보 사용');
+            setUserName(user.name || '플라이 관리자');
+            setUserEmail(user.email || '');
+            setUserPhone(user.phone || '');
+          }
+        } catch (error) {
+          console.error('사용자 정보 로드 실패:', error);
+          // 에러 발생 시 로컬 user 정보 사용
+          setUserName(user.name || '플라이 관리자');
+          setUserEmail(user.email || '');
+          setUserPhone(user.phone || '');
+        }
+      } else {
+        // user.id가 없는 경우 로컬 정보만 사용
+        console.warn('user.id가 없음, 로컬 정보 사용');
+        setUserName(user.name || '플라이 관리자');
+        setUserEmail(user.email || '');
+        setUserPhone(user.phone || '');
+      }
+      
+      setIsLoadingUserInfo(false);
+    };
+
+    loadUserInfo();
+  }, [user]);
+
+  // 사용자 정보 업데이트 함수 (Supabase 직접 사용)
+  const updateUserInfo = async (field, value) => {
+    if (!user || !user.id) {
+      alert('사용자 정보를 불러올 수 없습니다.');
+      return;
+    }
+
+    if (!supabase) {
+      alert('Supabase 클라이언트를 사용할 수 없습니다.');
+      return;
+    }
+
+    try {
+      console.log('📝 사용자 정보 업데이트 시도:', { userId: user.id, field, value });
+      
+      const updateData = { [field]: value };
+      
+      // Supabase에서 직접 업데이트
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('사용자 정보 업데이트 실패:', updateError);
+        throw new Error(updateError.message || '정보 업데이트에 실패했습니다.');
+      }
+
+      if (updatedUser) {
+        console.log('✅ 사용자 정보 업데이트 성공:', updatedUser);
+        
+        // 로컬 스토리지 업데이트
+        const updatedUserData = { ...user, ...updatedUser };
+        localStorage.setItem('user', JSON.stringify(updatedUserData));
+        
+        // 상태 업데이트
+        if (field === 'name') {
+          setUserName(value);
+        } else if (field === 'email') {
+          setUserEmail(value);
+        } else if (field === 'phone') {
+          setUserPhone(value);
+        }
+        
+        alert('정보가 성공적으로 업데이트되었습니다.');
+      } else {
+        throw new Error('업데이트된 사용자 정보를 받지 못했습니다.');
+      }
+    } catch (error) {
+      console.error('사용자 정보 업데이트 실패:', error);
+      const errorMessage = error.message || '정보 업데이트에 실패했습니다.';
+      alert(`업데이트 실패: ${errorMessage}`);
+    }
+  };
+
+  // 학원 정보 로드 (Supabase에서 직접 가져오기)
+  useEffect(() => {
+    const loadAcademyInfo = async () => {
+      setIsLoadingAcademyInfo(true);
+      
+      if (!academy || !academy.id) {
+        setIsLoadingAcademyInfo(false);
+        return;
+      }
+
+      if (!supabase) {
+        console.error('Supabase 클라이언트를 사용할 수 없습니다.');
+        setIsLoadingAcademyInfo(false);
+        return;
+      }
+
+      try {
+        // Supabase에서 학원 정보 직접 조회
+        const { data: academyData, error } = await supabase
+          .from('academies')
+          .select('id, name, address, floor, logo_url')
+          .eq('id', academy.id)
+          .single();
+
+        if (error) {
+          console.error('학원 정보 로드 실패:', error);
+          // 에러 발생 시 academy context의 정보 사용
+          const loadedData = {
+            name: academy.name || '',
+            address: '',
+            floor: '',
+            logo_url: academy.logo_url || ''
+          };
+          setAcademyName(loadedData.name);
+          setAcademyAddress(loadedData.address);
+          setAcademyFloor(loadedData.floor);
+          setLogoPreview(loadedData.logo_url);
+          setOriginalAcademyData(loadedData);
+        } else if (academyData) {
+          const loadedData = {
+            name: academyData.name || '',
+            address: academyData.address || '',
+            floor: academyData.floor || '',
+            logo_url: academyData.logo_url || ''
+          };
+          setAcademyName(loadedData.name);
+          setAcademyAddress(loadedData.address);
+          setAcademyFloor(loadedData.floor);
+          setLogoPreview(loadedData.logo_url);
+          setOriginalAcademyData(loadedData);
+        } else {
+          // 데이터가 없으면 academy context의 정보 사용
+          const loadedData = {
+            name: academy.name || '',
+            address: '',
+            floor: '',
+            logo_url: academy.logo_url || ''
+          };
+          setAcademyName(loadedData.name);
+          setAcademyAddress(loadedData.address);
+          setAcademyFloor(loadedData.floor);
+          setLogoPreview(loadedData.logo_url);
+          setOriginalAcademyData(loadedData);
+        }
+      } catch (error) {
+        console.error('학원 정보 로드 실패:', error);
+        // 에러 발생 시 academy context의 정보 사용
+        const loadedData = {
+          name: academy.name || '',
+          address: '',
+          floor: '',
+          logo_url: academy.logo_url || ''
+        };
+        setAcademyName(loadedData.name);
+        setAcademyAddress(loadedData.address);
+        setAcademyFloor(loadedData.floor);
+        setLogoPreview(loadedData.logo_url);
+        setOriginalAcademyData(loadedData);
+      } finally {
+        setIsLoadingAcademyInfo(false);
+      }
+    };
+
+    loadAcademyInfo();
+  }, [academy]);
+
+  // 학원 로고 업로드 핸들러
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // 파일 크기 검증 (5MB 제한)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('파일 크기는 5MB 이하여야 합니다.');
+        return;
+      }
+      
+      // 이미지 파일 검증
+      if (!file.type.startsWith('image/')) {
+        alert('이미지 파일만 업로드 가능합니다.');
+        return;
+      }
+
+      setAcademyLogo(file);
+      
+      // 미리보기 생성
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 드래그 앤 드롭 핸들러
+  const handleLogoDrop = (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('파일 크기는 5MB 이하여야 합니다.');
+        return;
+      }
+      
+      if (!file.type.startsWith('image/')) {
+        alert('이미지 파일만 업로드 가능합니다.');
+        return;
+      }
+
+      setAcademyLogo(file);
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 학원 정보 저장 (Supabase에 직접 저장)
+  const handleSaveAcademy = async () => {
+    if (!academy || !academy.id) {
+      alert('학원 정보를 불러올 수 없습니다.');
+      return;
+    }
+
+    if (!academyName.trim()) {
+      alert('학원명을 입력해주세요.');
+      return;
+    }
+
+    if (!supabase) {
+      alert('Supabase 클라이언트를 사용할 수 없습니다.');
+      return;
+    }
+
+    try {
+      let logoUrl = logoPreview;
+      
+      // 새 로고 파일이 선택된 경우 (base64 데이터 URL인 경우) Supabase Storage에 업로드
+      if (academyLogo && logoPreview && logoPreview.startsWith('data:')) {
+        try {
+          // 파일 확장자 추출
+          const fileExt = academyLogo.name.split('.').pop() || 'png';
+          const fileName = `academy-${academy.id}-${Date.now()}.${fileExt}`;
+          const filePath = `academy-logos/${fileName}`;
+
+          // Supabase Storage에 파일 업로드
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('academy-logos')
+            .upload(filePath, academyLogo, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (uploadError) {
+            console.error('로고 업로드 실패:', uploadError);
+            // Storage 버킷이 없거나 권한 문제인 경우, 기존 로고 URL 유지
+            if (uploadError.message?.includes('Bucket') || uploadError.message?.includes('bucket')) {
+              console.warn('Storage 버킷이 없거나 접근할 수 없습니다. 기존 로고 URL을 유지합니다.');
+              logoUrl = originalAcademyData?.logo_url || null;
+            } else {
+              // 다른 에러인 경우 기존 로고 URL 유지
+              logoUrl = originalAcademyData?.logo_url || null;
+            }
+          } else {
+            // 업로드 성공 시 Public URL 가져오기
+            const { data: urlData } = supabase.storage
+              .from('academy-logos')
+              .getPublicUrl(filePath);
+            
+            if (urlData?.publicUrl) {
+              logoUrl = urlData.publicUrl;
+            } else {
+              // Public URL을 가져올 수 없으면 기존 로고 URL 유지
+              logoUrl = originalAcademyData?.logo_url || null;
+            }
+          }
+        } catch (uploadErr) {
+          console.error('로고 업로드 중 오류:', uploadErr);
+          // 업로드 실패 시 기존 로고 URL 유지
+          logoUrl = originalAcademyData?.logo_url || null;
+        }
+      } else if (logoPreview && !logoPreview.startsWith('data:')) {
+        // 기존 URL인 경우 그대로 사용
+        logoUrl = logoPreview;
+      } else if (!logoPreview || logoPreview === '') {
+        // 로고가 삭제된 경우 null로 설정
+        logoUrl = null;
+      }
+
+      // Supabase에 학원 정보 업데이트
+      const updateData = {
+        name: academyName.trim(),
+        address: academyAddress.trim() || null,
+        floor: academyFloor.trim() || null,
+        logo_url: logoUrl || null
+      };
+
+      console.log('📝 학원 정보 업데이트 시도:', {
+        academyId: academy.id,
+        updateData
+      });
+
+      const { data: updatedAcademy, error: updateError } = await supabase
+        .from('academies')
+        .update(updateData)
+        .eq('id', academy.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('❌ 학원 정보 업데이트 실패:', updateError);
+        console.error('에러 상세:', {
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code
+        });
+        throw new Error(updateError.message || '학원 정보 저장에 실패했습니다.');
+      }
+
+      if (updatedAcademy) {
+        console.log('✅ 학원 정보 업데이트 성공:', updatedAcademy);
+        
+        // AcademyContext 업데이트
+        updateAcademy({
+          ...academy,
+          ...updatedAcademy
+        });
+        
+        // 원본 데이터 업데이트
+        const savedData = {
+          name: updatedAcademy.name || '',
+          address: updatedAcademy.address || '',
+          floor: updatedAcademy.floor || '',
+          logo_url: updatedAcademy.logo_url || ''
+        };
+        setOriginalAcademyData(savedData);
+        
+        // 상태 업데이트
+        setAcademyName(savedData.name);
+        setAcademyAddress(savedData.address);
+        setAcademyFloor(savedData.floor);
+        setLogoPreview(savedData.logo_url);
+        
+        // 업로드된 파일 초기화
+        setAcademyLogo(null);
+        
+        alert('학원 정보가 성공적으로 저장되었습니다.');
+        setIsAcademyEditMode(false);
+      } else {
+        console.error('❌ 업데이트된 학원 정보를 받지 못했습니다.');
+        throw new Error('업데이트된 학원 정보를 받지 못했습니다.');
+      }
+    } catch (error) {
+      console.error('학원 정보 저장 실패:', error);
+      const errorMessage = error.message || '학원 정보 저장에 실패했습니다.';
+      alert(`저장 실패: ${errorMessage}`);
+    }
+  };
+
   return (
     <div className="settings-page">
-      <h1 className="page-title">설정</h1>
+      <div className="settings-header">
+        <div className="settings-header-content">
+          <FaCog className="settings-header-icon" />
+          <div>
+            <h1 className="page-title">설정</h1>
+            <p className="page-subtitle">계정 및 시스템 설정을 관리합니다</p>
+          </div>
+        </div>
+      </div>
 
-      {/* 설정 섹션 */}
+      {/* 계정 설정 섹션 */}
       <div className="settings-section">
+        <div className="section-header-with-icon">
+          <FaUser className="section-icon" />
+          <h2 className="section-title">계정 설정</h2>
+        </div>
         
-        <div className="academy-info-section">
-          <div className="academy-info-header">
-            <h2 className="section-title">학원 정보</h2>
-            {!isEditMode ? (
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">사용자 이름</span>
+            <span className="settings-item-value">
+              {isLoadingUserInfo ? '로딩 중...' : (userName || '플라이 관리자')}
+            </span>
+          </div>
+          <button 
+            className="btn-modify"
+            disabled={isLoadingUserInfo}
+            onClick={async () => {
+              const newName = prompt('사용자 이름을 입력하세요:', userName || '플라이 관리자');
+              if (newName && newName.trim() && newName.trim() !== userName) {
+                await updateUserInfo('name', newName.trim());
+              }
+            }}
+          >
+            수정
+          </button>
+        </div>
+        
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">이메일</span>
+            <span className="settings-item-value">
+              {isLoadingUserInfo ? '로딩 중...' : (userEmail || '이메일이 없습니다')}
+            </span>
+          </div>
+          <button 
+            className="btn-modify"
+            disabled={isLoadingUserInfo}
+            onClick={async () => {
+              const newEmail = prompt('이메일을 입력하세요:', userEmail || '');
+              if (newEmail && newEmail.trim() && newEmail.trim() !== userEmail) {
+                // 이메일 형식 검증
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(newEmail.trim())) {
+                  alert('올바른 이메일 형식을 입력해주세요.');
+                  return;
+                }
+                await updateUserInfo('email', newEmail.trim());
+              }
+            }}
+          >
+            변경
+          </button>
+        </div>
+        
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">전화번호</span>
+            <span className="settings-item-value">
+              {isLoadingUserInfo ? '로딩 중...' : (userPhone || '전화번호가 없습니다')}
+            </span>
+          </div>
+          <button 
+            className="btn-modify"
+            disabled={isLoadingUserInfo}
+            onClick={async () => {
+              const newPhone = prompt('전화번호를 입력하세요:', userPhone || '');
+              if (newPhone && newPhone.trim() && newPhone.trim() !== userPhone) {
+                await updateUserInfo('phone', newPhone.trim());
+              }
+            }}
+          >
+            변경
+          </button>
+        </div>
+        
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">학원 코드</span>
+            <span className="settings-item-value">
+              {isLoadingUserInfo ? '로딩 중...' : (user?.academy_code || '학원 코드가 없습니다')}
+            </span>
+          </div>
+          <span className="settings-item-readonly">수정 불가</span>
+        </div>
+      </div>
+
+      {/* 학원 설정 섹션 */}
+      <div className="settings-section">
+        <div className="section-header-with-icon">
+          <FaBook className="section-icon" />
+          <h2 className="section-title">학원 설정</h2>
+        </div>
+        
+        {!isAcademyEditMode ? (
+          <>
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원명</span>
+                <span className="settings-item-value">
+                  {isLoadingAcademyInfo ? '로딩 중...' : (academyName || '학원명이 없습니다')}
+                </span>
+              </div>
               <button 
-                className="btn-edit"
-                onClick={() => setIsEditMode(true)}
+                className="btn-modify"
+                disabled={isLoadingAcademyInfo}
+                onClick={() => setIsAcademyEditMode(true)}
               >
-                수정하기
+                수정
               </button>
-            ) : (
+            </div>
+            
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원 로고</span>
+                <span className="settings-item-value">
+                  {isLoadingAcademyInfo ? '로딩 중...' : (logoPreview ? '로고가 설정되어 있습니다' : '로고가 없습니다')}
+                </span>
+              </div>
+              <button 
+                className="btn-modify"
+                disabled={isLoadingAcademyInfo}
+                onClick={() => setIsAcademyEditMode(true)}
+              >
+                수정
+              </button>
+            </div>
+            
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원 주소</span>
+                <span className="settings-item-value">
+                  {isLoadingAcademyInfo ? '로딩 중...' : (academyAddress || '주소가 없습니다')}
+                </span>
+              </div>
+              <button 
+                className="btn-modify"
+                disabled={isLoadingAcademyInfo}
+                onClick={() => setIsAcademyEditMode(true)}
+              >
+                수정
+              </button>
+            </div>
+            
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원 층수</span>
+                <span className="settings-item-value">
+                  {isLoadingAcademyInfo ? '로딩 중...' : (academyFloor || '층수가 없습니다')}
+                </span>
+              </div>
+              <button 
+                className="btn-modify"
+                disabled={isLoadingAcademyInfo}
+                onClick={() => setIsAcademyEditMode(true)}
+              >
+                수정
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원명</span>
+                <input
+                  type="text"
+                  className="settings-input"
+                  value={academyName}
+                  onChange={(e) => setAcademyName(e.target.value)}
+                  placeholder="학원명을 입력하세요"
+                />
+              </div>
+            </div>
+            
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원 로고</span>
+                <div className="logo-upload-area">
+                  <div
+                    className="logo-drop-zone"
+                    onDrop={handleLogoDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                    onClick={() => document.getElementById('logo-upload-input').click()}
+                  >
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="학원 로고" className="logo-preview" />
+                    ) : (
+                      <div className="logo-upload-placeholder">
+                        <p>파일을 이곳에 업로드하세요</p>
+                        <p className="logo-upload-hint">클릭하거나 드래그하여 파일을 업로드하세요</p>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    id="logo-upload-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원 주소</span>
+                <input
+                  type="text"
+                  className="settings-input"
+                  value={academyAddress}
+                  onChange={(e) => setAcademyAddress(e.target.value)}
+                  placeholder="학원 주소를 입력하세요"
+                />
+              </div>
+            </div>
+            
+            <div className="settings-item">
+              <div className="settings-item-content">
+                <span className="settings-item-label">학원 층수</span>
+                <input
+                  type="text"
+                  className="settings-input"
+                  value={academyFloor}
+                  onChange={(e) => setAcademyFloor(e.target.value)}
+                  placeholder="학원 층수를 입력하세요 (예: 2층, 지하1층)"
+                />
+              </div>
+            </div>
+            
+            <div className="settings-actions">
               <button 
                 className="btn-cancel"
                 onClick={() => {
-                  if (window.confirm('수정을 취소하시겠습니까? 변경사항이 저장되지 않습니다.')) {
-                    setIsEditMode(false);
-                    // 원래 데이터로 복원
-                    loadAcademy();
+                  setIsAcademyEditMode(false);
+                  // 편집 모드 취소 시 원래 값으로 복원
+                  if (originalAcademyData) {
+                    setAcademyName(originalAcademyData.name);
+                    setAcademyAddress(originalAcademyData.address);
+                    setAcademyFloor(originalAcademyData.floor);
+                    setLogoPreview(originalAcademyData.logo_url);
+                    setAcademyLogo(null);
                   }
                 }}
               >
                 취소
               </button>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">학원 정보</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="학원명을 입력하세요"
-              value={academyName}
-              onChange={(e) => setAcademyName(e.target.value)}
-              disabled={!isEditMode}
-              readOnly={!isEditMode}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">학원 로고</label>
-            <div
-              className={`logo-upload-area ${!isEditMode ? 'disabled' : ''}`}
-              onDrop={isEditMode ? handleLogoDrop : undefined}
-              onDragOver={isEditMode ? (e) => e.preventDefault() : undefined}
-            >
-              {logoPreview ? (
-                <img src={logoPreview} alt="학원 로고" className="logo-preview" />
-              ) : (
-                <div className="upload-placeholder">
-                  <span>파일을 이곳에 업로드하세요</span>
-                </div>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                className="file-input"
-                onChange={handleLogoUpload}
-                disabled={!isEditMode}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">학원 주소</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="학원 주소를 입력하세요"
-              value={academyAddress}
-              onChange={(e) => setAcademyAddress(e.target.value)}
-              disabled={!isEditMode}
-              readOnly={!isEditMode}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">학원 층수</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="학원 층수를 입력하세요 (예: 2층, 지하1층)"
-              value={academyFloor}
-              onChange={(e) => setAcademyFloor(e.target.value)}
-              disabled={!isEditMode}
-              readOnly={!isEditMode}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">학원 코드</label>
-            <div className="academy-code-wrapper">
-              <input
-                type="text"
-                className="form-input academy-code-input"
-                value={academyCode}
-                readOnly
-                placeholder="학원 코드가 자동으로 생성됩니다"
-              />
-              <button
-                type="button"
-                className="btn-copy-code"
-                onClick={handleCopyCode}
-                title="코드 복사"
-                disabled={!academyCode}
+              <button 
+                className="btn-save"
+                onClick={handleSaveAcademy}
+                disabled={isLoadingAcademyInfo}
               >
-                복사
+                설정 저장
               </button>
             </div>
-            <p className="code-description">
-              학원 코드는 학생 등록 시 사용되는 고유 코드입니다. 한 번 생성된 코드는 변경할 수 없습니다.
-            </p>
-          </div>
-
-          {isEditMode && (
-            <button className="btn-save" onClick={handleSaveAcademy}>
-              설정 저장
-            </button>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* 과목 관리 섹션 */}
@@ -2031,44 +2663,42 @@ const Settings = () => {
         </div>
         
         <div className="subject-form">
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">과목명 <span className="required">*</span></label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="예: 국어, 수학, 영어, 과학"
-                value={subjectName}
-                onChange={(e) => setSubjectName(e.target.value)}
-                disabled={!isSubjectEditMode}
-                readOnly={!isSubjectEditMode}
-              />
-            </div>
-            <div className="form-group color-group">
-              <label className="form-label">색상</label>
-              <div className="color-chips-wrapper">
-                {colorOptions.map((color) => (
-                  <div
-                    key={color.name}
-                    className={`color-chip ${subjectColor === color.value ? 'selected' : ''} ${!isSubjectEditMode ? 'disabled' : ''}`}
-                    style={{ 
-                      backgroundColor: color.value,
-                      cursor: isSubjectEditMode ? 'pointer' : 'default'
-                    }}
-                    onClick={() => {
-                      if (isSubjectEditMode) {
-                        console.log('색상 선택:', color.label, color.value);
-                        setSubjectColor(color.value);
-                      }
-                    }}
-                    title={color.label}
-                  >
-                    {subjectColor === color.value && (
-                      <span className="color-check">✓</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+          <div className="form-group">
+            <label className="form-label">과목명 <span className="required">*</span></label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="예: 국어, 수학, 영어, 과학"
+              value={subjectName}
+              onChange={(e) => setSubjectName(e.target.value)}
+              disabled={!isSubjectEditMode}
+              readOnly={!isSubjectEditMode}
+            />
+          </div>
+          <div className="form-group color-group">
+            <label className="form-label">색상</label>
+            <div className="color-chips-wrapper">
+              {colorOptions.map((color) => (
+                <div
+                  key={color.name}
+                  className={`color-chip ${subjectColor === color.value ? 'selected' : ''} ${!isSubjectEditMode ? 'disabled' : ''}`}
+                  style={{ 
+                    backgroundColor: color.value,
+                    cursor: isSubjectEditMode ? 'pointer' : 'default'
+                  }}
+                  onClick={() => {
+                    if (isSubjectEditMode) {
+                      console.log('색상 선택:', color.label, color.value);
+                      setSubjectColor(color.value);
+                    }
+                  }}
+                  title={color.label}
+                >
+                  {subjectColor === color.value && (
+                    <span className="color-check">✓</span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -2220,27 +2850,13 @@ const Settings = () => {
       <div className="settings-section">
         <div className="section-header">
           <h2 className="section-title">시간표 설정</h2>
-          {!isTimetableEditMode ? (
+          {!isTimetableEditMode && (
             <button
               type="button"
               className="btn-edit"
               onClick={() => setIsTimetableEditMode(true)}
             >
               수정하기
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn-cancel"
-              onClick={async () => {
-                if (window.confirm('시간표 설정 수정을 취소하시겠습니까? 저장되지 않은 변경사항은 사라집니다.')) {
-                  // 마지막으로 저장된 설정으로 되돌리기
-                  await loadTimetableSettings();
-                  setIsTimetableEditMode(false);
-                }
-              }}
-            >
-              취소
             </button>
           )}
         </div>
@@ -2278,106 +2894,53 @@ const Settings = () => {
             </select>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">요일별 시간 설정</label>
-            <div className="day-time-settings">
-              {operatingDays.map((day) => (
-                <div key={day} className="day-time-row">
-                  <div className="day-label">{day}</div>
-                  <div className="day-time-inputs">
-                    <select
-                      className="form-select"
-                      value={dayTimeSettings[day]?.startTime || '오전 08:00'}
-                      onChange={(e) => handleDayTimeChange(day, 'startTime', e.target.value)}
-                      disabled={!isTimetableEditMode}
-                    >
-                      <option value="오전 08:00">오전 08:00</option>
-                      <option value="오전 09:00">오전 09:00</option>
-                      <option value="오전 10:00">오전 10:00</option>
-                      <option value="오전 11:00">오전 11:00</option>
-                      <option value="오전 12:00">오전 12:00</option>
-                      <option value="오후 01:00">오후 01:00</option>
-                      <option value="오후 02:00">오후 02:00</option>
-                    </select>
-                    <span className="time-separator">~</span>
-                    <select
-                      className="form-select"
-                      value={dayTimeSettings[day]?.endTime || '오후 08:00'}
-                      onChange={(e) => handleDayTimeChange(day, 'endTime', e.target.value)}
-                      disabled={!isTimetableEditMode}
-                    >
-                      <option value="오후 06:00">오후 06:00</option>
-                      <option value="오후 07:00">오후 07:00</option>
-                      <option value="오후 08:00">오후 08:00</option>
-                      <option value="오후 09:00">오후 09:00</option>
-                      <option value="오후 10:00">오후 10:00</option>
-                      <option value="오후 11:00">오후 11:00</option>
-                    </select>
-                  </div>
-                </div>
-              ))}
-              {operatingDays.length === 0 && (
-                <div className="empty-day-message">운영 요일을 선택해주세요.</div>
-              )}
-            </div>
-          </div>
-
+          {/* 관별 강의실 설정 */}
           <div className="form-group">
             <label className="form-label">강의실 설정</label>
             <p className="form-description" style={{ fontSize: '0.9em', color: '#666', marginBottom: '10px' }}>
-              시간표에 표시할 강의실 이름을 직접 입력하세요. 필요하면 강의실 추가 버튼으로 더 추가할 수 있습니다.
+              각 관의 이름과 해당 관에 속한 강의실을 설정하세요.
             </p>
-            <div className="classrooms-list">
-              {classrooms.length === 0 ? (
-                // 강의실이 없으면 최소 하나의 입력창 표시
-                <div className="classroom-input-wrapper" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="강의실 1"
-                    value=""
-                    onChange={(e) => {
-                      setClassrooms([e.target.value]);
-                      setSelectedClassroomIds([null]);
-                    }}
-                    style={{ flex: 1 }}
-                    readOnly={!isTimetableEditMode}
-                    disabled={!isTimetableEditMode}
-                  />
+            <div className="buildings-list">
+              {buildings.length === 0 ? (
+                <div style={{ marginBottom: '20px', padding: '16px', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+                  <div className="building-input-wrapper" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="예시: 1관"
+                      value=""
+                      onChange={(e) => {
+                        setBuildings([{ id: 1, name: e.target.value, classrooms: [''], classroomIds: [null] }]);
+                      }}
+                      style={{ flex: 1 }}
+                      readOnly={!isTimetableEditMode}
+                      disabled={!isTimetableEditMode}
+                    />
+                  </div>
                 </div>
               ) : (
-                classrooms.map((classroom, index) => {
-                  const selectedId = selectedClassroomIds[index];
-                  const isMatched = selectedId && availableClassrooms.some(c => c.id === selectedId);
-                  
-                  // 수정 모드이면 항상 삭제 가능 (삭제 후 최소 하나의 빈 입력창은 자동으로 유지됨)
-                  const canDelete = isTimetableEditMode;
-                  
-                  return (
-                    <div key={index} className="classroom-input-wrapper" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                buildings.map((building, buildingIndex) => (
+                  <div key={building.id} style={{ marginBottom: '24px', padding: '16px', border: '1px solid #e0e0e0', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
+                    {/* 관 이름 입력 */}
+                    <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ minWidth: '60px', fontSize: '0.95em', fontWeight: 600, color: '#333' }}>
+                        관 이름:
+                      </label>
                       <input
                         type="text"
                         className="form-input"
-                        placeholder={`강의실 ${index + 1}`}
-                        value={classroom}
-                        onChange={(e) => handleClassroomChange(index, e.target.value)}
-                        style={{
-                          borderColor: classroom && !isMatched ? '#ff6b6b' : undefined,
-                          flex: 1
-                        }}
+                        placeholder={`${building.id}관`}
+                        value={building.name}
+                        onChange={(e) => handleBuildingNameChange(buildingIndex, e.target.value)}
+                        style={{ flex: 1, maxWidth: '200px' }}
                         readOnly={!isTimetableEditMode}
                         disabled={!isTimetableEditMode}
                       />
-                      {isMatched && (
-                        <span style={{ color: '#51cf66', fontSize: '1.2em' }} title="저장된 강의실">
-                          ✓
-                        </span>
-                      )}
-                      {canDelete && (
+                      {isTimetableEditMode && buildings.length > 1 && (
                         <button
                           type="button"
                           className="btn-delete-classroom"
-                          onClick={() => handleDeleteClassroom(index)}
+                          onClick={() => handleDeleteBuilding(buildingIndex)}
                           style={{ 
                             padding: '6px 12px', 
                             background: '#e74c3c', 
@@ -2386,40 +2949,451 @@ const Settings = () => {
                             borderRadius: '4px', 
                             cursor: 'pointer',
                             fontSize: '0.9em',
-                            fontWeight: '500',
-                            transition: 'background 0.2s'
+                            fontWeight: 500
                           }}
                           onMouseOver={(e) => e.target.style.background = '#c0392b'}
                           onMouseOut={(e) => e.target.style.background = '#e74c3c'}
-                          title={isMatched ? '저장된 강의실 삭제' : '강의실 입력 삭제'}
                         >
-                          삭제
+                          관 삭제
                         </button>
                       )}
                     </div>
-                  );
-                })
+                    
+                    {/* 해당 관의 강의실 입력 */}
+                    <div style={{ marginLeft: '20px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9em', color: '#666' }}>
+                        강의실 목록:
+                      </label>
+                      <div className="classrooms-list">
+                        {building.classrooms.length === 0 ? (
+                          <div className="classroom-input-wrapper" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <select
+                              className="form-select"
+                              value=""
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === '__NEW__') {
+                                  // 새 강의실 추가 모드
+                                  const updated = [...buildings];
+                                  updated[buildingIndex] = { ...building, classrooms: [''], classroomIds: [null] };
+                                  setBuildings(updated);
+                                } else if (value) {
+                                  // 기존 강의실 선택
+                                  const selectedClassroom = availableClassrooms.find(c => c.id === value);
+                                  if (selectedClassroom) {
+                                    const updated = [...buildings];
+                                    updated[buildingIndex] = { 
+                                      ...building, 
+                                      classrooms: [selectedClassroom.name], 
+                                      classroomIds: [selectedClassroom.id] 
+                                    };
+                                    setBuildings(updated);
+                                  }
+                                }
+                              }}
+                              disabled={!isTimetableEditMode}
+                              style={{ flex: 1 }}
+                            >
+                              <option value="">강의실 선택</option>
+                              {availableClassrooms.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                              <option value="__NEW__">+ 새 강의실 추가</option>
+                            </select>
+                          </div>
+                        ) : (
+                          building.classrooms.map((classroom, classroomIndex) => {
+                            const selectedId = building.classroomIds[classroomIndex];
+                            const isMatched = selectedId && availableClassrooms.some(c => c.id === selectedId);
+                            const isNewClassroom = classroom && !isMatched;
+                            
+                            return (
+                              <div key={classroomIndex} className="classroom-input-wrapper" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {isNewClassroom ? (
+                                  // 새 강의실 입력 모드
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="새 강의실 이름 입력"
+                                    value={classroom}
+                                    onChange={(e) => handleBuildingClassroomChange(buildingIndex, classroomIndex, e.target.value)}
+                                    style={{
+                                      borderColor: '#3498db',
+                                      flex: 1
+                                    }}
+                                    readOnly={!isTimetableEditMode}
+                                    disabled={!isTimetableEditMode}
+                                  />
+                                ) : (
+                                  // 기존 강의실 선택 모드
+                                  <select
+                                    className="form-select"
+                                    value={selectedId || ''}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      if (value === '__NEW__') {
+                                        // 새 강의실 추가 모드로 전환
+                                        const updated = [...buildings];
+                                        const newClassrooms = [...building.classrooms];
+                                        const newClassroomIds = [...building.classroomIds];
+                                        newClassrooms[classroomIndex] = '';
+                                        newClassroomIds[classroomIndex] = null;
+                                        updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
+                                        setBuildings(updated);
+                                      } else if (value) {
+                                        // 기존 강의실 선택
+                                        const selectedClassroom = availableClassrooms.find(c => c.id === value);
+                                        if (selectedClassroom) {
+                                          const updated = [...buildings];
+                                          const newClassrooms = [...building.classrooms];
+                                          const newClassroomIds = [...building.classroomIds];
+                                          newClassrooms[classroomIndex] = selectedClassroom.name;
+                                          newClassroomIds[classroomIndex] = selectedClassroom.id;
+                                          updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
+                                          setBuildings(updated);
+                                        }
+                                      }
+                                    }}
+                                    disabled={!isTimetableEditMode}
+                                    style={{ flex: 1 }}
+                                  >
+                                    <option value="">강의실 선택</option>
+                                    {availableClassrooms.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                    <option value="__NEW__">+ 새 강의실 추가</option>
+                                  </select>
+                                )}
+                                {isMatched && (
+                                  <span style={{ color: '#51cf66', fontSize: '1.2em' }} title="저장된 강의실">
+                                    ✓
+                                  </span>
+                                )}
+                                {isTimetableEditMode && (
+                                  <button
+                                    type="button"
+                                    className="btn-delete-classroom"
+                                    onClick={() => handleDeleteBuildingClassroom(buildingIndex, classroomIndex)}
+                                    style={{ 
+                                      padding: '6px 12px', 
+                                      background: '#e74c3c', 
+                                      color: 'white', 
+                                      border: 'none', 
+                                      borderRadius: '4px', 
+                                      cursor: 'pointer',
+                                      fontSize: '0.9em',
+                                      fontWeight: 500
+                                    }}
+                                    onMouseOver={(e) => e.target.style.background = '#c0392b'}
+                                    onMouseOut={(e) => e.target.style.background = '#e74c3c'}
+                                  >
+                                    삭제
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                        {isTimetableEditMode && (
+                          <button
+                            type="button"
+                            className="btn-add-classroom"
+                            onClick={() => handleAddBuildingClassroom(buildingIndex)}
+                            style={{
+                              padding: '8px 16px',
+                              background: '#3498db',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '0.9em',
+                              fontWeight: 600,
+                              marginTop: '8px'
+                            }}
+                            onMouseOver={(e) => e.target.style.background = '#2980b9'}
+                            onMouseOut={(e) => e.target.style.background = '#3498db'}
+                          >
+                            + 강의실 추가
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              {isTimetableEditMode && (
+                <button
+                  type="button"
+                  className="btn-add-classroom"
+                  onClick={handleAddBuilding}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#3498db',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.95em',
+                    fontWeight: 600,
+                    marginTop: '8px'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = '#2980b9'}
+                  onMouseOut={(e) => e.target.style.background = '#3498db'}
+                >
+                  + 관 추가
+                </button>
               )}
             </div>
-            {classrooms.length < 10 && isTimetableEditMode && (
-              <button 
-                className="btn-add-classroom" 
-                onClick={handleAddClassroom}
-                style={{ marginTop: '10px', padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-              >
-                + 강의실 추가
-              </button>
-            )}
-            {availableClassrooms.length === 0 && classrooms.some(c => c && c.trim()) && (
-              <div style={{ marginTop: '10px', fontSize: '0.85em', color: '#666', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
-                💡 강의실 이름을 입력하고 저장하면 자동으로 강의실이 생성됩니다.
-              </div>
-            )}
-            {/* 사용 가능한 강의실 안내 텍스트는 제거 */}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">요일별 시간 설정</label>
+            <div className="day-time-settings">
+              {['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'].map((day) => {
+                const dayKey = day.replace('요일', '');
+                // operatingDays에 포함된 요일만 표시
+                if (!operatingDays.includes(dayKey)) return null;
+                
+                const timeSetting = dayTimeSettings[dayKey] || { startTime: '오전 09:00', endTime: '오후 10:00' };
+                
+                // 시작 시간 파싱
+                const startPeriod = timeSetting.startTime?.includes('오전') ? '오전' : '오후';
+                const startTime = timeSetting.startTime?.split(' ')[1] || '09:00';
+                const startTimeParts = startTime.split(':');
+                const startHour = startTimeParts[0] || '09';
+                const startMinute = startTimeParts[1] || '00';
+                
+                // 종료 시간 파싱
+                const endPeriod = timeSetting.endTime?.includes('오전') ? '오전' : '오후';
+                const endTime = timeSetting.endTime?.split(' ')[1] || '10:00';
+                const endTimeParts = endTime.split(':');
+                const endHour = endTimeParts[0] || '10';
+                const endMinute = endTimeParts[1] || '00';
+                
+                return (
+                  <div key={day} className="day-time-row">
+                    <span className="day-label">{day}</span>
+                    <div className="day-time-inputs">
+                      {/* 시작 시간 */}
+                      <select
+                        className="form-select period-select"
+                        value={startPeriod}
+                        onChange={(e) => {
+                          const period = e.target.value;
+                          handleDayTimeChange(dayKey, 'startTime', `${period} ${startHour}:${startMinute}`);
+                        }}
+                        disabled={!isTimetableEditMode}
+                      >
+                        <option value="오전">오전</option>
+                        <option value="오후">오후</option>
+                      </select>
+                      <div className="time-input-wrapper">
+                        <FaClock className="clock-icon" />
+                        <input
+                          type="number"
+                          className="form-input hour-input"
+                          value={startHour}
+                          min="1"
+                          max="12"
+                          onChange={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, ''); // 숫자만 추출
+                            if (value === '') {
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} 00:${startMinute}`);
+                              return;
+                            }
+                            const hourNum = parseInt(value);
+                            if (hourNum < 1) {
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} 01:${startMinute}`);
+                            } else if (hourNum > 12) {
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} 12:${startMinute}`);
+                            } else {
+                              const hour = String(hourNum).padStart(2, '0');
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${hour}:${startMinute}`);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, '');
+                            let hour = '09';
+                            if (value) {
+                              const hourNum = parseInt(value);
+                              if (hourNum < 1) {
+                                hour = '01';
+                              } else if (hourNum > 12) {
+                                hour = '12';
+                              } else {
+                                hour = String(hourNum).padStart(2, '0');
+                              }
+                            }
+                            handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${hour}:${startMinute}`);
+                          }}
+                          disabled={!isTimetableEditMode}
+                          placeholder="09"
+                          style={{ width: '60px', textAlign: 'center' }}
+                        />
+                        <span style={{ marginLeft: '4px', fontSize: '0.9em' }}>시</span>
+                      </div>
+                      <div className="time-input-wrapper">
+                        <input
+                          type="number"
+                          className="form-input minute-input"
+                          value={startMinute}
+                          min="0"
+                          max="59"
+                          onChange={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, ''); // 숫자만 추출
+                            if (value === '') {
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${startHour}:00`);
+                              return;
+                            }
+                            const minuteNum = parseInt(value);
+                            if (minuteNum < 0) {
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${startHour}:00`);
+                            } else if (minuteNum > 59) {
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${startHour}:59`);
+                            } else {
+                              const minute = String(minuteNum).padStart(2, '0');
+                              handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${startHour}:${minute}`);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, '');
+                            let minute = '00';
+                            if (value !== '') {
+                              const minuteNum = parseInt(value);
+                              if (minuteNum < 0) {
+                                minute = '00';
+                              } else if (minuteNum > 59) {
+                                minute = '59';
+                              } else {
+                                minute = String(minuteNum).padStart(2, '0');
+                              }
+                            }
+                            handleDayTimeChange(dayKey, 'startTime', `${startPeriod} ${startHour}:${minute}`);
+                          }}
+                          disabled={!isTimetableEditMode}
+                          placeholder="00"
+                          style={{ width: '60px', textAlign: 'center' }}
+                        />
+                        <span style={{ marginLeft: '4px', fontSize: '0.9em' }}>분</span>
+                      </div>
+                      
+                      <span className="time-separator">-</span>
+                      
+                      {/* 종료 시간 */}
+                      <select
+                        className="form-select period-select"
+                        value={endPeriod}
+                        onChange={(e) => {
+                          const period = e.target.value;
+                          handleDayTimeChange(dayKey, 'endTime', `${period} ${endHour}:${endMinute}`);
+                        }}
+                        disabled={!isTimetableEditMode}
+                      >
+                        <option value="오전">오전</option>
+                        <option value="오후">오후</option>
+                      </select>
+                      <div className="time-input-wrapper">
+                        <FaClock className="clock-icon" />
+                        <input
+                          type="number"
+                          className="form-input hour-input"
+                          value={endHour}
+                          min="1"
+                          max="12"
+                          onChange={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, ''); // 숫자만 추출
+                            if (value === '') {
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} 00:${endMinute}`);
+                              return;
+                            }
+                            const hourNum = parseInt(value);
+                            if (hourNum < 1) {
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} 01:${endMinute}`);
+                            } else if (hourNum > 12) {
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} 12:${endMinute}`);
+                            } else {
+                              const hour = String(hourNum).padStart(2, '0');
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${hour}:${endMinute}`);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, '');
+                            let hour = '10';
+                            if (value) {
+                              const hourNum = parseInt(value);
+                              if (hourNum < 1) {
+                                hour = '01';
+                              } else if (hourNum > 12) {
+                                hour = '12';
+                              } else {
+                                hour = String(hourNum).padStart(2, '0');
+                              }
+                            }
+                            handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${hour}:${endMinute}`);
+                          }}
+                          disabled={!isTimetableEditMode}
+                          placeholder="10"
+                          style={{ width: '60px', textAlign: 'center' }}
+                        />
+                        <span style={{ marginLeft: '4px', fontSize: '0.9em' }}>시</span>
+                      </div>
+                      <div className="time-input-wrapper">
+                        <input
+                          type="number"
+                          className="form-input minute-input"
+                          value={endMinute}
+                          min="0"
+                          max="59"
+                          onChange={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, ''); // 숫자만 추출
+                            if (value === '') {
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${endHour}:00`);
+                              return;
+                            }
+                            const minuteNum = parseInt(value);
+                            if (minuteNum < 0) {
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${endHour}:00`);
+                            } else if (minuteNum > 59) {
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${endHour}:59`);
+                            } else {
+                              const minute = String(minuteNum).padStart(2, '0');
+                              handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${endHour}:${minute}`);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            let value = e.target.value.replace(/[^0-9]/g, '');
+                            let minute = '00';
+                            if (value !== '') {
+                              const minuteNum = parseInt(value);
+                              if (minuteNum < 0) {
+                                minute = '00';
+                              } else if (minuteNum > 59) {
+                                minute = '59';
+                              } else {
+                                minute = String(minuteNum).padStart(2, '0');
+                              }
+                            }
+                            handleDayTimeChange(dayKey, 'endTime', `${endPeriod} ${endHour}:${minute}`);
+                          }}
+                          disabled={!isTimetableEditMode}
+                          placeholder="00"
+                          style={{ width: '60px', textAlign: 'center' }}
+                        />
+                        <span style={{ marginLeft: '4px', fontSize: '0.9em' }}>분</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {isTimetableEditMode && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #e0e0e0' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #e0e0e0' }}>
               <button 
                 className="btn-save" 
                 onClick={handleSaveTimetable}
@@ -2439,13 +3413,33 @@ const Settings = () => {
               >
                 저장 완료
               </button>
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={async () => {
+                  if (window.confirm('시간표 설정 수정을 취소하시겠습니까? 저장되지 않은 변경사항은 사라집니다.')) {
+                    // 마지막으로 저장된 설정으로 되돌리기
+                    await loadTimetableSettings();
+                    setIsTimetableEditMode(false);
+                  }
+                }}
+                style={{
+                  padding: '12px 24px',
+                  background: '#95a5a6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseOver={(e) => e.target.style.background = '#7f8c8d'}
+                onMouseOut={(e) => e.target.style.background = '#95a5a6'}
+              >
+                취소
+              </button>
             </div>
-          )}
-
-          {isTimetableEditMode && (
-            <button className="btn-save-timetable" onClick={handleSaveTimetable}>
-              시간표 설정 저장
-            </button>
           )}
         </div>
       </div>
@@ -2878,8 +3872,115 @@ const Settings = () => {
         </div>
       </div>
 
+      {/* 알림 설정 섹션 */}
+      <div className="settings-section">
+        <div className="section-header-with-icon">
+          <FaBell className="section-icon" />
+          <h2 className="section-title">알림 설정</h2>
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">이메일 알림</span>
+            <p className="settings-item-description">중요한 업데이트를 이메일로 받습니다</p>
+          </div>
+          <ToggleSwitch
+            checked={emailNotifications}
+            onChange={(e) => setEmailNotifications(e.target.checked)}
+          />
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">수업 알림</span>
+            <p className="settings-item-description">수업 시작 전 알림을 받습니다</p>
+          </div>
+          <ToggleSwitch
+            checked={classNotifications}
+            onChange={(e) => setClassNotifications(e.target.checked)}
+          />
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">마케팅 알림</span>
+            <p className="settings-item-description">프로모션 및 이벤트 정보를 받습니다</p>
+          </div>
+          <ToggleSwitch
+            checked={marketingNotifications}
+            onChange={(e) => setMarketingNotifications(e.target.checked)}
+          />
+        </div>
+      </div>
+
+      {/* 시스템 설정 섹션 */}
+      <div className="settings-section">
+        <div className="section-header-with-icon">
+          <FaGlobe className="section-icon" />
+          <h2 className="section-title">시스템 설정</h2>
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">언어</span>
+            <span className="settings-item-value">{language}</span>
+          </div>
+          <button className="btn-modify" onClick={() => {
+            const newLang = prompt('언어를 입력하세요:', language);
+            if (newLang) setLanguage(newLang);
+          }}>
+            변경
+          </button>
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">시간대</span>
+            <span className="settings-item-value">{timezone}</span>
+          </div>
+          <button className="btn-modify" onClick={() => {
+            const newTz = prompt('시간대를 입력하세요:', timezone);
+            if (newTz) setTimezone(newTz);
+          }}>
+            변경
+          </button>
+        </div>
+        <div className="settings-item">
+          <div className="settings-item-content">
+            <span className="settings-item-label">다크 모드</span>
+            <p className="settings-item-description">어두운 테마를 사용합니다</p>
+          </div>
+          <ToggleSwitch
+            checked={darkMode}
+            onChange={(e) => setDarkMode(e.target.checked)}
+          />
+        </div>
+      </div>
+
+      {/* 지원 섹션 */}
+      <div className="settings-section">
+        <div className="section-header-with-icon">
+          <FaHeadset className="section-icon" />
+          <h2 className="section-title">지원</h2>
+        </div>
+        <div className="support-links">
+          <a href="#" className="support-link">
+            <span>문의하기</span>
+            <FaChevronRight className="support-link-icon" />
+          </a>
+          <a href="#" className="support-link">
+            <span>이용약관</span>
+            <FaChevronRight className="support-link-icon" />
+          </a>
+          <a href="#" className="support-link">
+            <span>개인정보처리방침</span>
+            <FaChevronRight className="support-link-icon" />
+          </a>
+        </div>
+      </div>
+
       {/* 비밀번호 변경 섹션 */}
       <PasswordChangeSection />
+
+      {/* 홈으로 돌아가기 버튼 */}
+      <button className="btn-home" onClick={() => navigate('/')}>
+        홈으로 돌아가기
+      </button>
     </div>
   );
 };

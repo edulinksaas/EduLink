@@ -43,6 +43,8 @@ const Classes = () => {
   };
 
   const [selectedDay, setSelectedDay] = useState(() => getTodayDay());
+  const [selectedBuilding, setSelectedBuilding] = useState(null); // 선택된 관 ID (초기값: null, 첫 번째 관으로 설정)
+  const [buildingNames, setBuildingNames] = useState([{ id: 1, name: '1관' }]);
   const [loading, setLoading] = useState(false);
   const [autoReturnTimer, setAutoReturnTimer] = useState(null);
   const [showReturnDialog, setShowReturnDialog] = useState(false);
@@ -558,6 +560,24 @@ const Classes = () => {
         if (settingsResponse.settings && Array.isArray(settingsResponse.settings.classroom_ids)) {
           settingsClassroomIds = settingsResponse.settings.classroom_ids;
           console.log('✅ DB 시간표 설정에서 강의실 ID 로드:', settingsClassroomIds);
+        }
+        // 관 이름 로드
+        if (settingsResponse.settings?.building_names) {
+          if (Array.isArray(settingsResponse.settings.building_names)) {
+            setBuildingNames(settingsResponse.settings.building_names);
+          } else if (settingsResponse.settings.building_names.building1 || settingsResponse.settings.building_names.building2) {
+            // 레거시 형식 (객체)을 배열로 변환
+            const buildings = [];
+            if (settingsResponse.settings.building_names.building1) {
+              buildings.push({ id: 1, name: settingsResponse.settings.building_names.building1 });
+            }
+            if (settingsResponse.settings.building_names.building2) {
+              buildings.push({ id: 2, name: settingsResponse.settings.building_names.building2 });
+            }
+            if (buildings.length > 0) {
+              setBuildingNames(buildings);
+            }
+          }
         }
       } catch (settingsError) {
         console.warn('⚠️ 시간표 설정 로드 실패:', settingsError);
@@ -1484,6 +1504,45 @@ const Classes = () => {
     return result;
   }, [classrooms]);
 
+  // 관별로 강의실 분배 (각 관당 6개씩)
+  const classroomsByBuilding = useMemo(() => {
+    const buildings = [];
+    const classroomsPerBuilding = 6;
+    
+    buildingNames.forEach((building, buildingIndex) => {
+      const startIndex = buildingIndex * classroomsPerBuilding;
+      const endIndex = startIndex + classroomsPerBuilding;
+      const buildingClassrooms = displayClassrooms.slice(startIndex, endIndex);
+      if (buildingClassrooms.length > 0) {
+        buildings.push({
+          id: building.id,
+          name: building.name,
+          classrooms: buildingClassrooms
+        });
+      }
+    });
+    
+    // selectedBuilding이 null이면 첫 번째 관으로 설정
+    if (buildings.length > 0 && selectedBuilding === null) {
+      setSelectedBuilding(buildings[0].id);
+    }
+    
+    return buildings;
+  }, [displayClassrooms, buildingNames, selectedBuilding]);
+
+  // 메인 시간표에 표시할 강의실 (첫 번째 관)
+  const mainClassrooms = useMemo(() => {
+    return classroomsByBuilding[0]?.classrooms || displayClassrooms.slice(0, 6);
+  }, [classroomsByBuilding, displayClassrooms]);
+
+  // 추가 시간표 섹션에 표시할 강의실 (두 번째 관부터)
+  const additionalClassrooms = useMemo(() => {
+    if (classroomsByBuilding.length > 1) {
+      return classroomsByBuilding[1]?.classrooms || [];
+    }
+    return displayClassrooms.slice(6);
+  }, [classroomsByBuilding, displayClassrooms]);
+
   const statCards = [
     {
       title: '금일 현황',
@@ -1607,7 +1666,54 @@ const Classes = () => {
       )}
 
       <div className="page-header-section">
-        <h1 className="page-title">전체 시간표</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h1 className="page-title">전체 시간표</h1>
+          {classroomsByBuilding.length > 1 && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {buildingNames.map((building) => {
+                const buildingClassrooms = classroomsByBuilding.find(b => b.id === building.id)?.classrooms || [];
+                if (buildingClassrooms.length === 0) return null;
+                
+                return (
+                  <button
+                    key={building.id}
+                    className={`building-button ${selectedBuilding === building.id ? 'active' : ''}`}
+                    onClick={() => setSelectedBuilding(building.id)}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      border: '2px solid',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      backgroundColor: selectedBuilding === building.id ? '#3498db' : 'white',
+                      color: selectedBuilding === building.id ? 'white' : '#3498db',
+                      borderColor: '#3498db',
+                      textAlign: 'center',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseOver={(e) => {
+                      if (selectedBuilding !== building.id) {
+                        e.target.style.backgroundColor = '#e8f4f8';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (selectedBuilding !== building.id) {
+                        e.target.style.backgroundColor = 'white';
+                      }
+                    }}
+                  >
+                    {building.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <div className="header-actions">
           <div className="day-buttons">
             {days.map((day) => (
@@ -1631,23 +1737,25 @@ const Classes = () => {
         </div>
       </div>
 
-      <div className="timetable-container">
-        <table className="timetable">
-          <thead>
-            <tr>
-              <th className="time-column">시간</th>
-              {displayClassrooms.map((classroom) => (
-                <th key={classroom.id} className="classroom-column">
-                  {classroom.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {timeSlots.map((timeSlot) => (
-              <tr key={timeSlot}>
-                <td className="time-cell">{timeSlot}</td>
-                {displayClassrooms.map((classroom) => {
+      {/* 첫 번째 관 시간표 (첫 번째 관 선택 시 또는 관이 하나일 때 표시) */}
+      {(classroomsByBuilding.length === 0 || selectedBuilding === (classroomsByBuilding[0]?.id || 1)) && (
+        <div className="timetable-container">
+          <table className="timetable">
+            <thead>
+              <tr>
+                <th className="time-column">시간</th>
+                {mainClassrooms.map((classroom) => (
+                  <th key={classroom.id} className="classroom-column">
+                    {classroom.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {timeSlots.map((timeSlot) => (
+                <tr key={timeSlot}>
+                  <td className="time-cell">{timeSlot}</td>
+                  {mainClassrooms.map((classroom) => {
                   const classItem = getClassForSlot(timeSlot, classroom.id);
                   // 선생님 정보 찾기
                   const teacher = classItem ? teachers.find(t => t.id === classItem.teacher_id) : null;
@@ -1797,9 +1905,190 @@ const Classes = () => {
                 })}
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 두 번째 관 이후 시간표 (두 번째 관 이후 선택 시 표시) */}
+      {classroomsByBuilding.length > 1 && classroomsByBuilding.slice(1).some(b => b.id === selectedBuilding) && (
+        <div className="timetable-container">
+            <table className="timetable">
+              <thead>
+                <tr>
+                  <th className="time-column">시간</th>
+                  {additionalClassrooms.map((classroom) => (
+                    <th key={classroom.id} className="classroom-column">
+                      {classroom.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {timeSlots.map((timeSlot) => (
+                  <tr key={timeSlot}>
+                    <td className="time-cell">{timeSlot}</td>
+                    {additionalClassrooms.map((classroom) => {
+                      const classItem = getClassForSlot(timeSlot, classroom.id);
+                      // 선생님 정보 찾기
+                      const teacher = classItem ? teachers.find(t => t.id === classItem.teacher_id) : null;
+                      // 과목 정보 찾기 (색상용)
+                      const subject = classItem ? subjects.find(s => s.id === classItem.subject_id) : null;
+                      
+                      // 수업 아이템의 위치와 높이 계산
+                      let itemStyle = {};
+                      if (classItem && classItem.start_time && classItem.end_time) {
+                        const slotStartMinutes = parseHHMMToMinutes(String(timeSlot));
+                        const classStartMinutes = parseHHMMToMinutes(String(classItem.start_time));
+                        const classEndMinutes = parseHHMMToMinutes(String(classItem.end_time));
+                        
+                        if (slotStartMinutes != null && classStartMinutes != null && classEndMinutes != null) {
+                          // 시간대 셀의 높이 (1시간 = 60분 기준)
+                          const cellHeightMinutes = 60;
+                          
+                          // 시간대 시작 시간 기준으로 수업 시작 시간까지의 분 차이
+                          const offsetMinutes = classStartMinutes - slotStartMinutes;
+                          
+                          // 수업의 지속 시간 (분)
+                          const durationMinutes = classEndMinutes - classStartMinutes;
+                          
+                          // 수업이 이 슬롯에서 시작하는 경우만 표시 (offsetMinutes >= 0 && offsetMinutes < 60)
+                          if (offsetMinutes >= 0 && offsetMinutes < cellHeightMinutes) {
+                            // 수업의 전체 지속 시간을 표시 (다음 슬롯으로 넘어가도 전체 높이 표시)
+                            const topPercent = (offsetMinutes / cellHeightMinutes) * 100;
+                            const heightPercent = (durationMinutes / cellHeightMinutes) * 100;
+                            
+                            itemStyle = {
+                              position: 'absolute',
+                              top: `${topPercent}%`,
+                              height: `${heightPercent}%`,
+                              minHeight: '50px',
+                              zIndex: 1
+                            };
+                          }
+                        }
+                      }
+                      
+                      // 과목 색상 적용 (밝은 배경색과 원본 테두리 색상)
+                      const subjectColor = subject?.color || '#1976d2';
+                      const lightenColor = (color) => {
+                        try {
+                          // HEX 색상을 RGB로 변환
+                          let hex = color.replace('#', '');
+                          // 3자리 HEX 색상 처리 (예: #FFF -> #FFFFFF)
+                          if (hex.length === 3) {
+                            hex = hex.split('').map(char => char + char).join('');
+                          }
+                          if (hex.length !== 6) {
+                            return '#e3f2fd'; // 기본 색상 반환
+                          }
+                          const r = parseInt(hex.substr(0, 2), 16);
+                          const g = parseInt(hex.substr(2, 2), 16);
+                          const b = parseInt(hex.substr(4, 2), 16);
+                          // 더 투명하게 만들기 (50% 원본 색상 + 50% 흰색 혼합)
+                          const lightR = Math.round(r * 0.5 + 255 * 0.5);
+                          const lightG = Math.round(g * 0.5 + 255 * 0.5);
+                          const lightB = Math.round(b * 0.5 + 255 * 0.5);
+                          return `rgb(${lightR}, ${lightG}, ${lightB})`;
+                        } catch (error) {
+                          return '#e3f2fd'; // 기본 색상 반환
+                        }
+                      };
+                      
+                      const backgroundColor = subjectColor ? lightenColor(subjectColor) : '#e3f2fd';
+                      const borderColor = subjectColor || '#90caf9';
+                      const textColor = '#000000'; // 모든 텍스트는 검은색으로 통일
+                      
+                      // hover 색상 계산
+                      const getHoverColor = (color) => {
+                        try {
+                          let hex = color.replace('#', '');
+                          if (hex.length === 3) {
+                            hex = hex.split('').map(char => char + char).join('');
+                          }
+                          if (hex.length !== 6) {
+                            return backgroundColor;
+                          }
+                          const r = parseInt(hex.substr(0, 2), 16);
+                          const g = parseInt(hex.substr(2, 2), 16);
+                          const b = parseInt(hex.substr(4, 2), 16);
+                          // hover 시 조금 더 진하게 (40% 원본 색상 + 60% 흰색 혼합)
+                          const hoverR = Math.round(r * 0.4 + 255 * 0.6);
+                          const hoverG = Math.round(g * 0.4 + 255 * 0.6);
+                          const hoverB = Math.round(b * 0.4 + 255 * 0.6);
+                          return `rgb(${hoverR}, ${hoverG}, ${hoverB})`;
+                        } catch (error) {
+                          return backgroundColor;
+                        }
+                      };
+                      
+                      return (
+                        <td key={classroom.id} className="classroom-cell">
+                          {classItem ? (
+                            <div
+                              className="class-item"
+                              style={{
+                                ...itemStyle,
+                                backgroundColor: backgroundColor,
+                                borderColor: borderColor,
+                                color: textColor
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = getHoverColor(subjectColor);
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = backgroundColor;
+                              }}
+                              onClick={() => handleOpenStudentList(classItem)}
+                            >
+                              <button
+                                type="button"
+                                className="class-item-edit"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEdit(classItem);
+                                }}
+                                title="수업 수정"
+                                aria-label="수업 수정"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                className="class-item-delete"
+                                onClick={(e) => handleDelete(classItem, e)}
+                                title="수업 삭제"
+                                aria-label="수업 삭제"
+                              >
+                                🗑️
+                              </button>
+                              <div className="class-item-content">
+                                <div className="class-item-title">{classItem.name}</div>
+                                <div className="class-item-teacher">
+                                  {teacher ? teacher.name : '선생님 미지정'}
+                                </div>
+                                <div className="class-item-time">
+                                  {classItem.start_time} - {classItem.end_time}
+                                </div>
+                                {classStudentCounts[classItem.id] !== undefined && (
+                                  <div className="class-item-students">
+                                    학생 {classStudentCounts[classItem.id]}명
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="empty-class-cell"></div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+      )}
 
       <ClassFormModal
         isOpen={isModalOpen}

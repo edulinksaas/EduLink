@@ -2,11 +2,13 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { supabase } from '../config/supabase';
 import { authService } from '../services/authService';
 
-const AuthContext = createContext(null);
+// Context 초기화 확인을 위한 기본값
+const AuthContext = createContext(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  // undefined인 경우에만 에러 발생 (null은 유효한 값일 수 있음)
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -20,6 +22,21 @@ export const AuthProvider = ({ children }) => {
   // 초기 로드 시 Supabase 세션 확인
   useEffect(() => {
     if (!supabase) {
+      console.warn('⚠️ Supabase 클라이언트가 없습니다. localStorage에서 사용자 정보 확인');
+      // 기존 localStorage 토큰 확인 (하위 호환성)
+      const token = localStorage.getItem('token');
+      const savedUser = localStorage.getItem('user');
+      
+      if (token && savedUser) {
+        try {
+          const userData = JSON.parse(savedUser);
+          setUser(userData);
+        } catch (err) {
+          console.error('사용자 정보 복원 실패:', err);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      }
       setLoading(false);
       return;
     }
@@ -46,23 +63,40 @@ export const AuthProvider = ({ children }) => {
         }
       }
       setLoading(false);
+    }).catch((err) => {
+      console.error('세션 확인 실패:', err);
+      setLoading(false);
     });
 
     // 인증 상태 변경 리스너
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          await loadUserData(session.user.email);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+    let subscription = null;
+    try {
+      const authStateChangeResult = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            await loadUserData(session.user.email);
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+          }
         }
-      }
-    );
+      );
+      
+      // onAuthStateChange는 { data: { subscription } } 형태로 반환됨
+      subscription = authStateChangeResult?.data?.subscription;
+    } catch (err) {
+      console.error('인증 상태 변경 리스너 설정 실패:', err);
+    }
 
     return () => {
-      subscription.unsubscribe();
+      if (subscription) {
+        try {
+          subscription.unsubscribe();
+        } catch (err) {
+          console.warn('리스너 해제 실패:', err);
+        }
+      }
     };
   }, []);
 

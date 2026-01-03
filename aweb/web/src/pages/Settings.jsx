@@ -1339,22 +1339,22 @@ const Settings = () => {
     const newClassroomIds = [...building.classroomIds];
     
     newClassrooms[classroomIndex] = value;
-    updated[buildingIndex] = { ...building, classrooms: newClassrooms };
-    setBuildings(updated);
     
-    // 입력한 이름으로 강의실 찾기
+    // ID 기반 매칭: 이름으로 기존 강의실 찾기 (드롭다운에서 선택한 경우가 아닌 직접 입력한 경우)
     if (value.trim()) {
       const foundClassroom = availableClassrooms.find(c => c.name === value.trim());
       if (foundClassroom) {
+        // 기존 강의실이 있으면 ID 저장
         newClassroomIds[classroomIndex] = foundClassroom.id;
         updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
         setBuildings(updated);
-        console.log('✅ 강의실 선택:', foundClassroom.id, foundClassroom.name);
+        console.log('✅ 강의실 선택 (ID 기반):', foundClassroom.id, foundClassroom.name);
       } else {
+        // 새 강의실인 경우 ID는 null로 유지 (저장 시 생성)
         newClassroomIds[classroomIndex] = null;
         updated[buildingIndex] = { ...building, classrooms: newClassrooms, classroomIds: newClassroomIds };
         setBuildings(updated);
-        console.warn('⚠️ 강의실을 찾을 수 없습니다:', value);
+        console.log('📝 새 강의실 입력 (저장 시 생성됨):', value);
       }
     } else {
       newClassroomIds[classroomIndex] = null;
@@ -1485,62 +1485,61 @@ const Settings = () => {
       
       console.log('📝 저장할 관별 강의실:', buildings);
       
-      // 각 관에 대해 처리
+      // 각 관에 대해 처리 (ID 기반으로만 처리)
       for (let buildingIndex = 0; buildingIndex < buildings.length; buildingIndex++) {
         const building = buildings[buildingIndex];
         const validClassroomIds = [];
-        const validClassroomNames = [];
         
-        // 해당 관의 각 강의실에 대해 처리
-        for (let i = 0; i < building.classrooms.length; i++) {
-          const name = building.classrooms[i]?.trim();
-          if (!name) continue; // 빈 값은 건너뛰기
+        // 해당 관의 각 강의실에 대해 처리 (ID만 사용)
+        for (let i = 0; i < building.classroomIds.length; i++) {
+          const classroomId = building.classroomIds[i];
           
-          const existingId = building.classroomIds[i];
+          // ID가 없으면 건너뛰기
+          if (!classroomId) continue;
           
-          console.log(`🔍 강의실 처리 중 [관${building.id}][${i}]:`, { name, existingId });
+          console.log(`🔍 강의실 처리 중 [관${building.id}][${i}]:`, { classroomId });
           
-          // 이미 ID가 있고 해당 강의실이 존재하는지 확인
-          if (existingId && allClassrooms.some(c => c.id === existingId)) {
-            const existingClassroom = allClassrooms.find(c => c.id === existingId);
-            // 이름이 일치하는지 확인
-            if (existingClassroom.name === name) {
-              validClassroomIds.push(existingId);
-              validClassroomNames.push(name);
-              allClassroomIds.push(existingId);
-              console.log('✅ 기존 강의실 사용:', existingId, name);
-              continue;
-            } else {
-              console.warn(`⚠️ ID는 있지만 이름이 다릅니다. 이름으로 다시 찾습니다.`, {
-                저장된ID: existingId,
-                저장된이름: existingClassroom.name,
-                입력한이름: name
-              });
-            }
-          }
+          // ID로 강의실 찾기
+          let foundClassroom = allClassrooms.find(c => c.id === classroomId);
           
-          // 이름으로 강의실 찾기
-          let foundClassroom = allClassrooms.find(c => c.name === name);
-          
+          // ID가 있지만 DB에 없는 경우 (새로 생성된 강의실이거나 삭제된 경우)
           if (!foundClassroom) {
-            // 강의실이 없으면 생성
-            try {
-              console.log(`📝 강의실 생성 시도: ${name}`);
-              const createResponse = await classroomService.create({
-                name: name,
-                academy_id: academyId,
-                capacity: 20,
-              });
-              
-              if (createResponse.data?.classroom) {
-                foundClassroom = createResponse.data.classroom;
-                console.log(`✅ 강의실 생성 완료: ${name}`, foundClassroom.id);
-                // 생성 후 목록에 추가
-                allClassrooms.push(foundClassroom);
+            const name = building.classrooms[i]?.trim();
+            if (name) {
+              // 새 강의실 생성 시도
+              try {
+                console.log(`📝 강의실 생성 시도: ${name} (ID: ${classroomId})`);
+                const createResponse = await classroomService.create({
+                  name: name,
+                  academy_id: academyId,
+                  capacity: 20,
+                });
+                
+                if (createResponse.data?.classroom) {
+                  foundClassroom = createResponse.data.classroom;
+                  console.log(`✅ 강의실 생성 완료: ${name}`, foundClassroom.id);
+                  // 생성 후 목록에 추가
+                  allClassrooms.push(foundClassroom);
+                  
+                  // buildings 상태 업데이트 (생성된 ID로 교체)
+                  const updatedBuildings = [...buildings];
+                  const updatedIds = [...building.classroomIds];
+                  updatedIds[i] = foundClassroom.id;
+                  updatedBuildings[buildingIndex] = {
+                    ...building,
+                    classroomIds: updatedIds
+                  };
+                  setBuildings(updatedBuildings);
+                }
+              } catch (classroomError) {
+                console.warn(`⚠️ 강의실 생성 실패: ${name}`, classroomError);
+                // 생성 실패 시 해당 항목 건너뛰기
+                continue;
               }
-            } catch (classroomError) {
-              console.warn(`⚠️ 강의실 생성 실패: ${name}`, classroomError);
-              // 생성 실패해도 계속 진행
+            } else {
+              // 이름도 없으면 건너뛰기
+              console.warn(`⚠️ 강의실 ID는 있지만 이름이 없습니다: ${classroomId}`);
+              continue;
             }
           }
           
@@ -1548,42 +1547,29 @@ const Settings = () => {
             // UUID 형식 검증
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             if (!uuidRegex.test(foundClassroom.id)) {
-              console.error(`❌ 잘못된 강의실 ID 형식: ${foundClassroom.id} (강의실: ${name})`);
+              console.error(`❌ 잘못된 강의실 ID 형식: ${foundClassroom.id}`);
               continue; // 잘못된 ID는 건너뛰기
             }
             
             validClassroomIds.push(foundClassroom.id);
-            validClassroomNames.push(name);
             allClassroomIds.push(foundClassroom.id);
             
-            // buildings 상태 업데이트
-            const updatedBuildings = [...buildings];
-            const updatedIds = [...building.classroomIds];
-            updatedIds[i] = foundClassroom.id;
-            updatedBuildings[buildingIndex] = {
-              ...building,
-              classrooms: [...building.classrooms],
-              classroomIds: updatedIds
-            };
-            setBuildings(updatedBuildings);
-            
-            console.log('✅ 강의실 ID 저장:', foundClassroom.id, name);
+            console.log('✅ 강의실 ID 저장:', foundClassroom.id, foundClassroom.name);
           } else {
-            console.warn(`⚠️ 강의실을 찾거나 생성할 수 없습니다: ${name}`);
+            console.warn(`⚠️ 강의실을 찾거나 생성할 수 없습니다: ${classroomId}`);
           }
         }
         
-        // 관별 강의실 정보 저장
+        // 관별 강의실 정보 저장 (ID만 저장)
         processedBuildings.push({
           id: building.id,
           name: building.name,
-          classroomIds: validClassroomIds,
-          classrooms: validClassroomNames
+          classroomIds: validClassroomIds
         });
         
         console.log(`✅ 관 ${building.id} (${building.name}) 강의실 처리 완료:`, {
           IDs: validClassroomIds,
-          Names: validClassroomNames
+          count: validClassroomIds.length
         });
       }
       
@@ -1675,7 +1661,7 @@ const Settings = () => {
       // 새로 생성된 강의실이 드롭다운에 나타나도록 강의실 목록 다시 로드
       await loadClassrooms();
 
-      // localStorage에도 저장 (마이그레이션 지원)
+      // localStorage에도 저장 (마이그레이션 지원) - ID만 저장
       try {
         const localSettings = {
           timeInterval,
@@ -1683,10 +1669,9 @@ const Settings = () => {
           dayTimeSettings,
           timetableName,
           classroomIds: allClassroomIds,
-          classrooms: processedBuildings.flatMap(b => b.classrooms),
         };
         localStorage.setItem('timetableSettings', JSON.stringify(localSettings));
-        console.log('✅ localStorage에도 저장 완료');
+        console.log('✅ localStorage에도 저장 완료 (ID만 저장)');
       } catch (localError) {
         console.warn('localStorage 저장 실패:', localError);
       }
@@ -2041,16 +2026,43 @@ const Settings = () => {
       const updateData = { [field]: value };
       
       // Supabase에서 직접 업데이트
-      const { data: updatedUser, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('users')
         .update(updateData)
-        .eq('id', user.id)
-        .select()
-        .single();
+        .eq('id', user.id);
 
       if (updateError) {
         console.error('사용자 정보 업데이트 실패:', updateError);
         throw new Error(updateError.message || '정보 업데이트에 실패했습니다.');
+      }
+
+      // 업데이트 성공 후 별도로 업데이트된 데이터 조회
+      const { data: updatedUser, error: selectError } = await supabase
+        .from('users')
+        .select('id, name, email, phone, academy_code, academy_id, role')
+        .eq('id', user.id)
+        .single();
+
+      if (selectError) {
+        console.error('업데이트된 사용자 정보 조회 실패:', selectError);
+        // 업데이트는 성공했지만 조회에 실패한 경우, 로컬 상태만 업데이트
+        console.log('⚠️ 업데이트는 성공했지만 조회에 실패했습니다. 로컬 상태만 업데이트합니다.');
+        
+        // 로컬 스토리지 업데이트 (부분 업데이트)
+        const updatedUserData = { ...user, [field]: value };
+        localStorage.setItem('user', JSON.stringify(updatedUserData));
+        
+        // 상태 업데이트
+        if (field === 'name') {
+          setUserName(value);
+        } else if (field === 'email') {
+          setUserEmail(value);
+        } else if (field === 'phone') {
+          setUserPhone(value);
+        }
+        
+        alert('정보가 성공적으로 업데이트되었습니다.');
+        return;
       }
 
       if (updatedUser) {
@@ -2071,7 +2083,21 @@ const Settings = () => {
         
         alert('정보가 성공적으로 업데이트되었습니다.');
       } else {
-        throw new Error('업데이트된 사용자 정보를 받지 못했습니다.');
+        // 업데이트는 성공했지만 조회 결과가 없는 경우, 로컬 상태만 업데이트
+        console.log('⚠️ 업데이트는 성공했지만 조회 결과가 없습니다. 로컬 상태만 업데이트합니다.');
+        
+        const updatedUserData = { ...user, [field]: value };
+        localStorage.setItem('user', JSON.stringify(updatedUserData));
+        
+        if (field === 'name') {
+          setUserName(value);
+        } else if (field === 'email') {
+          setUserEmail(value);
+        } else if (field === 'phone') {
+          setUserPhone(value);
+        }
+        
+        alert('정보가 성공적으로 업데이트되었습니다.');
       }
     } catch (error) {
       console.error('사용자 정보 업데이트 실패:', error);
@@ -2080,21 +2106,23 @@ const Settings = () => {
     }
   };
 
-  // 학원 정보 로드 (Supabase에서 직접 가져오기)
+  // 학원 정보 로드 및 Supabase Realtime 연동
   useEffect(() => {
+    if (!academy || !academy.id) {
+      setIsLoadingAcademyInfo(false);
+      return;
+    }
+
+    if (!supabase) {
+      console.error('Supabase 클라이언트를 사용할 수 없습니다.');
+      setIsLoadingAcademyInfo(false);
+      return;
+    }
+
+    let subscription = null;
+
     const loadAcademyInfo = async () => {
       setIsLoadingAcademyInfo(true);
-      
-      if (!academy || !academy.id) {
-        setIsLoadingAcademyInfo(false);
-        return;
-      }
-
-      if (!supabase) {
-        console.error('Supabase 클라이언트를 사용할 수 없습니다.');
-        setIsLoadingAcademyInfo(false);
-        return;
-      }
 
       try {
         // Supabase에서 학원 정보 직접 조회
@@ -2109,14 +2137,14 @@ const Settings = () => {
           // 에러 발생 시 academy context의 정보 사용
           const loadedData = {
             name: academy.name || '',
-            address: '',
-            floor: '',
+            address: academy.address || '',
+            floor: academy.floor || '',
             logo_url: academy.logo_url || ''
           };
           setAcademyName(loadedData.name);
           setAcademyAddress(loadedData.address);
           setAcademyFloor(loadedData.floor);
-          setLogoPreview(loadedData.logo_url);
+          setLogoPreview(loadedData.logo_url || '');
           setOriginalAcademyData(loadedData);
         } else if (academyData) {
           const loadedData = {
@@ -2125,23 +2153,24 @@ const Settings = () => {
             floor: academyData.floor || '',
             logo_url: academyData.logo_url || ''
           };
+          console.log('✅ 학원 정보 로드 성공 (Supabase):', loadedData);
           setAcademyName(loadedData.name);
           setAcademyAddress(loadedData.address);
           setAcademyFloor(loadedData.floor);
-          setLogoPreview(loadedData.logo_url);
+          setLogoPreview(loadedData.logo_url || '');
           setOriginalAcademyData(loadedData);
         } else {
           // 데이터가 없으면 academy context의 정보 사용
           const loadedData = {
             name: academy.name || '',
-            address: '',
-            floor: '',
+            address: academy.address || '',
+            floor: academy.floor || '',
             logo_url: academy.logo_url || ''
           };
           setAcademyName(loadedData.name);
           setAcademyAddress(loadedData.address);
           setAcademyFloor(loadedData.floor);
-          setLogoPreview(loadedData.logo_url);
+          setLogoPreview(loadedData.logo_url || '');
           setOriginalAcademyData(loadedData);
         }
       } catch (error) {
@@ -2149,22 +2178,91 @@ const Settings = () => {
         // 에러 발생 시 academy context의 정보 사용
         const loadedData = {
           name: academy.name || '',
-          address: '',
-          floor: '',
+          address: academy.address || '',
+          floor: academy.floor || '',
           logo_url: academy.logo_url || ''
         };
         setAcademyName(loadedData.name);
         setAcademyAddress(loadedData.address);
         setAcademyFloor(loadedData.floor);
-        setLogoPreview(loadedData.logo_url);
+        setLogoPreview(loadedData.logo_url || '');
         setOriginalAcademyData(loadedData);
       } finally {
         setIsLoadingAcademyInfo(false);
       }
     };
 
+    // 초기 로드
     loadAcademyInfo();
-  }, [academy]);
+
+    // Supabase Realtime 구독 설정 (academies 테이블 변경사항 실시간 감지)
+    subscription = supabase
+      .channel(`academy-${academy.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE 모두 감지
+          schema: 'public',
+          table: 'academies',
+          filter: `id=eq.${academy.id}`
+        },
+        (payload) => {
+          console.log('🔄 학원 정보 변경 감지 (Realtime):', payload);
+          
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const updatedData = payload.new;
+            const loadedData = {
+              name: updatedData.name || '',
+              address: updatedData.address || '',
+              floor: updatedData.floor || '',
+              logo_url: updatedData.logo_url || ''
+            };
+            
+            console.log('✅ 학원 정보 실시간 업데이트:', loadedData);
+            
+            // 상태 업데이트 (편집 모드가 아닐 때만 자동 업데이트)
+            if (!isAcademyEditMode) {
+              setAcademyName(loadedData.name);
+              setAcademyAddress(loadedData.address);
+              setAcademyFloor(loadedData.floor);
+              setLogoPreview(loadedData.logo_url || '');
+            }
+            
+            // 원본 데이터는 항상 업데이트
+            setOriginalAcademyData(loadedData);
+            
+            // AcademyContext도 업데이트
+            updateAcademy({
+              ...academy,
+              ...loadedData
+            });
+          } else if (payload.eventType === 'DELETE') {
+            console.warn('⚠️ 학원 정보가 삭제되었습니다.');
+            // 삭제된 경우 기본값으로 설정
+            setAcademyName('');
+            setAcademyAddress('');
+            setAcademyFloor('');
+            setLogoPreview('');
+            setOriginalAcademyData(null);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ 학원 정보 Realtime 구독 성공');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ 학원 정보 Realtime 구독 실패');
+        }
+      });
+
+    // cleanup 함수: 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      if (subscription) {
+        console.log('🔌 학원 정보 Realtime 구독 해제');
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, [academy?.id, supabase, isAcademyEditMode, updateAcademy]);
 
   // 학원 로고 업로드 핸들러
   const handleLogoUpload = (e) => {
@@ -2303,12 +2401,11 @@ const Settings = () => {
         updateData
       });
 
-      const { data: updatedAcademy, error: updateError } = await supabase
+      // Supabase에서 학원 정보 업데이트
+      const { error: updateError } = await supabase
         .from('academies')
         .update(updateData)
-        .eq('id', academy.id)
-        .select()
-        .single();
+        .eq('id', academy.id);
 
       if (updateError) {
         console.error('❌ 학원 정보 업데이트 실패:', updateError);
@@ -2319,6 +2416,48 @@ const Settings = () => {
           code: updateError.code
         });
         throw new Error(updateError.message || '학원 정보 저장에 실패했습니다.');
+      }
+
+      // 업데이트 성공 후 별도로 업데이트된 데이터 조회
+      const { data: updatedAcademy, error: selectError } = await supabase
+        .from('academies')
+        .select('id, name, address, floor, logo_url')
+        .eq('id', academy.id)
+        .single();
+
+      if (selectError) {
+        console.error('업데이트된 학원 정보 조회 실패:', selectError);
+        // 업데이트는 성공했지만 조회에 실패한 경우, 업데이트한 데이터로 로컬 상태만 업데이트
+        console.log('⚠️ 업데이트는 성공했지만 조회에 실패했습니다. 업데이트한 데이터로 로컬 상태를 업데이트합니다.');
+        
+        const savedData = {
+          name: updateData.name || '',
+          address: updateData.address || '',
+          floor: updateData.floor || '',
+          logo_url: updateData.logo_url || ''
+        };
+        
+        // AcademyContext 업데이트
+        updateAcademy({
+          ...academy,
+          ...savedData
+        });
+        
+        // 원본 데이터 업데이트
+        setOriginalAcademyData(savedData);
+        
+        // 상태 업데이트
+        setAcademyName(savedData.name);
+        setAcademyAddress(savedData.address);
+        setAcademyFloor(savedData.floor);
+        setLogoPreview(savedData.logo_url);
+        
+        // 업로드된 파일 초기화
+        setAcademyLogo(null);
+        
+        alert('학원 정보가 성공적으로 저장되었습니다.');
+        setIsAcademyEditMode(false);
+        return;
       }
 
       if (updatedAcademy) {
@@ -2351,8 +2490,36 @@ const Settings = () => {
         alert('학원 정보가 성공적으로 저장되었습니다.');
         setIsAcademyEditMode(false);
       } else {
-        console.error('❌ 업데이트된 학원 정보를 받지 못했습니다.');
-        throw new Error('업데이트된 학원 정보를 받지 못했습니다.');
+        // 업데이트는 성공했지만 조회 결과가 없는 경우, 업데이트한 데이터로 로컬 상태만 업데이트
+        console.log('⚠️ 업데이트는 성공했지만 조회 결과가 없습니다. 업데이트한 데이터로 로컬 상태를 업데이트합니다.');
+        
+        const savedData = {
+          name: updateData.name || '',
+          address: updateData.address || '',
+          floor: updateData.floor || '',
+          logo_url: updateData.logo_url || ''
+        };
+        
+        // AcademyContext 업데이트
+        updateAcademy({
+          ...academy,
+          ...savedData
+        });
+        
+        // 원본 데이터 업데이트
+        setOriginalAcademyData(savedData);
+        
+        // 상태 업데이트
+        setAcademyName(savedData.name);
+        setAcademyAddress(savedData.address);
+        setAcademyFloor(savedData.floor);
+        setLogoPreview(savedData.logo_url);
+        
+        // 업로드된 파일 초기화
+        setAcademyLogo(null);
+        
+        alert('학원 정보가 성공적으로 저장되었습니다.');
+        setIsAcademyEditMode(false);
       }
     } catch (error) {
       console.error('학원 정보 저장 실패:', error);

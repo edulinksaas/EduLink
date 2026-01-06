@@ -2,18 +2,34 @@ import { supabase } from '../config/supabase.js';
 
 // Parent Model
 export class Parent {
-  constructor(data) {
-    this.id = data.id;
-    this.name = data.name || '';
-    this.email = data.email || '';
-    this.phone = data.phone || '';
-    this.address = data.address || '';
-    this.institution_name = data.institution_name || '';
-    this.institution_type = data.institution_type || '';
-    this.institution_address = data.institution_address || '';
-    this.institution_phone = data.institution_phone || '';
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  // 화이트리스트: 테이블 실제 컬럼만 정의
+  static columns = ['id', 'name', 'email', 'phone', 'address', 'institution_name', 'institution_type', 'institution_address', 'institution_phone', 'created_at', 'updated_at'];
+  static writableColumns = ['name', 'email', 'phone', 'address', 'institution_name', 'institution_type', 'institution_address', 'institution_phone', 'updated_at'];
+
+  // payload 정규화 헬퍼
+  static pick(obj, keys) {
+    const out = {};
+    for (const k of keys) {
+      if (obj?.[k] !== undefined) {
+        out[k] = obj[k];
+      }
+    }
+    return out;
+  }
+
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.name = data.name ?? '';
+    this.email = data.email ?? '';
+    this.phone = data.phone ?? '';
+    this.address = data.address ?? '';
+    this.institution_name = data.institution_name ?? '';
+    this.institution_type = data.institution_type ?? '';
+    this.institution_address = data.institution_address ?? '';
+    this.institution_phone = data.institution_phone ?? '';
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
 
   static async findByPhone(phone) {
@@ -34,7 +50,6 @@ export class Parent {
         .single();
 
       if (error) {
-        // 데이터가 없는 경우는 null 반환 (에러 아님)
         if (error.code === 'PGRST116') {
           return null;
         }
@@ -77,7 +92,8 @@ export class Parent {
     }
 
     try {
-      const parentData = {
+      // 화이트리스트 방식으로 payload 생성
+      const inputData = {
         name: this.name || '',
         email: this.email || '',
         phone: this.phone || '',
@@ -89,11 +105,20 @@ export class Parent {
         updated_at: new Date().toISOString(),
       };
 
+      // 개발용 가드
+      const extra = Object.keys(inputData).filter(k => !Parent.writableColumns.includes(k));
+      if (extra.length) {
+        console.warn('[Parent GUARD] extra keys ignored:', extra);
+      }
+
+      // 화이트리스트 payload 생성
+      const dbPayload = Parent.pick(inputData, Parent.writableColumns);
+
       if (this.id) {
         // 업데이트
         const { error: updateError } = await supabase
           .from('parents')
-          .update(parentData)
+          .update(dbPayload)
           .eq('id', this.id);
 
         if (updateError) {
@@ -110,16 +135,30 @@ export class Parent {
 
         if (fetchError) {
           console.warn('업데이트 후 조회 실패:', fetchError);
-          Object.assign(this, { ...this, ...parentData });
+          // 화이트리스트 방식으로 업데이트
+          for (const k of Parent.writableColumns) {
+            if (inputData[k] !== undefined) {
+              this[k] = inputData[k];
+            }
+          }
         } else if (fetchedData) {
-          Object.assign(this, new Parent(fetchedData));
+          const saved = new Parent(fetchedData);
+          for (const k of Parent.columns) {
+            this[k] = saved[k];
+          }
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
-          Object.assign(this, { ...this, ...parentData });
+          for (const k of Parent.writableColumns) {
+            if (inputData[k] !== undefined) {
+              this[k] = inputData[k];
+            }
+          }
         }
       } else {
         // 생성
         const insertData = {
-          ...parentData,
+          ...dbPayload,
           created_at: new Date().toISOString(),
         };
 
@@ -135,10 +174,20 @@ export class Parent {
 
         if (!insertResult || insertResult.length === 0) {
           console.warn('insert().select()가 빈 배열을 반환했습니다.');
-          // insert는 성공했을 수 있으므로 현재 데이터로 설정
-          Object.assign(this, new Parent({ ...insertData, id: this.id }));
+          // insert는 성공했을 수 있으므로 현재 데이터로 설정 (화이트리스트 방식)
+          const temp = new Parent({ ...insertData, id: this.id });
+          for (const k of Parent.columns) {
+            this[k] = temp[k];
+          }
+          this.createdAt = temp.createdAt;
+          this.updatedAt = temp.updatedAt;
         } else {
-          Object.assign(this, new Parent(insertResult[0]));
+          const saved = new Parent(insertResult[0]);
+          for (const k of Parent.columns) {
+            this[k] = saved[k];
+          }
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         }
       }
 
@@ -150,7 +199,15 @@ export class Parent {
   }
 
   async update(data) {
-    Object.assign(this, data);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.name !== undefined) this.name = data.name;
+    if (data.email !== undefined) this.email = data.email;
+    if (data.phone !== undefined) this.phone = data.phone;
+    if (data.address !== undefined) this.address = data.address;
+    if (data.institution_name !== undefined) this.institution_name = data.institution_name;
+    if (data.institution_type !== undefined) this.institution_type = data.institution_type;
+    if (data.institution_address !== undefined) this.institution_address = data.institution_address;
+    if (data.institution_phone !== undefined) this.institution_phone = data.institution_phone;
     this.updatedAt = new Date();
     return await this.save();
   }
@@ -175,5 +232,3 @@ export class Parent {
     }
   }
 }
-
-

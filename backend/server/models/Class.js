@@ -1,20 +1,21 @@
 import { supabase } from '../config/supabase.js';
 
 export class Class {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.subject_id = data.subject_id;
-    this.teacher_id = data.teacher_id;
-    this.classroom_id = data.classroom_id;
-    this.name = data.name;
-    this.level = data.level;
-    this.schedule = data.schedule;
-    this.start_time = data.start_time;
-    this.end_time = data.end_time;
-    this.max_students = data.max_students;
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.subject_id = data.subject_id ?? null;
+    this.teacher_id = data.teacher_id ?? null;
+    this.classroom_id = data.classroom_id ?? null;
+    this.name = data.name ?? null;
+    this.level = data.level ?? null;
+    this.schedule = data.schedule ?? null;
+    this.start_time = data.start_time ?? null;
+    this.end_time = data.end_time ?? null;
+    this.max_students = data.max_students ?? null;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll(academyId) {
@@ -177,7 +178,20 @@ export class Class {
         if (error) throw error;
         
         if (data) {
-          Object.assign(this, new Class(data));
+          const saved = new Class(data);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.subject_id = saved.subject_id;
+          this.teacher_id = saved.teacher_id;
+          this.classroom_id = saved.classroom_id;
+          this.name = saved.name;
+          this.level = saved.level;
+          this.schedule = saved.schedule;
+          this.start_time = saved.start_time;
+          this.end_time = saved.end_time;
+          this.max_students = saved.max_students;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         }
       } else {
         // 생성
@@ -210,10 +224,36 @@ export class Class {
         if (error) throw error;
         
         if (data) {
-          Object.assign(this, new Class(data));
+          const saved = new Class(data);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.subject_id = saved.subject_id;
+          this.teacher_id = saved.teacher_id;
+          this.classroom_id = saved.classroom_id;
+          this.name = saved.name;
+          this.level = saved.level;
+          this.schedule = saved.schedule;
+          this.start_time = saved.start_time;
+          this.end_time = saved.end_time;
+          this.max_students = saved.max_students;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
-          // INSERT는 성공했지만 SELECT가 실패한 경우
-          Object.assign(this, new Class({ ...insertData }));
+          // INSERT는 성공했지만 SELECT가 실패한 경우 (화이트리스트 방식)
+          const temp = new Class({ ...insertData });
+          this.id = temp.id;
+          this.academy_id = temp.academy_id;
+          this.subject_id = temp.subject_id;
+          this.teacher_id = temp.teacher_id;
+          this.classroom_id = temp.classroom_id;
+          this.name = temp.name;
+          this.level = temp.level;
+          this.schedule = temp.schedule;
+          this.start_time = temp.start_time;
+          this.end_time = temp.end_time;
+          this.max_students = temp.max_students;
+          this.createdAt = temp.createdAt;
+          this.updatedAt = temp.updatedAt;
         }
       }
       
@@ -225,7 +265,17 @@ export class Class {
   }
   
   async update(data) {
-    Object.assign(this, data);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.academy_id !== undefined) this.academy_id = data.academy_id;
+    if (data.subject_id !== undefined) this.subject_id = data.subject_id;
+    if (data.teacher_id !== undefined) this.teacher_id = data.teacher_id;
+    if (data.classroom_id !== undefined) this.classroom_id = data.classroom_id;
+    if (data.name !== undefined) this.name = data.name;
+    if (data.level !== undefined) this.level = data.level;
+    if (data.schedule !== undefined) this.schedule = data.schedule;
+    if (data.start_time !== undefined) this.start_time = data.start_time;
+    if (data.end_time !== undefined) this.end_time = data.end_time;
+    if (data.max_students !== undefined) this.max_students = data.max_students;
     this.updatedAt = new Date();
     return await this.save();
   }

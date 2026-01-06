@@ -2,14 +2,15 @@ import { supabase } from '../config/supabase.js';
 
 // Subject Model
 export class Subject {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.name = data.name;
-    this.color = data.color;
-    this.description = data.description;
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.name = data.name ?? null;
+    this.color = data.color ?? '#3D62E4';
+    this.description = data.description ?? null;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll(academyId) {
@@ -168,10 +169,20 @@ export class Subject {
         
         if (updateResult && updateResult.length > 0) {
           console.log('✅ 과목 업데이트 성공:', updateResult[0].id, updateResult[0].name);
-          Object.assign(this, new Subject(updateResult[0]));
+          const saved = new Subject(updateResult[0]);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.name = saved.name;
+          this.color = saved.color;
+          this.description = saved.description;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
           console.warn('⚠️ 업데이트 결과가 없습니다.');
-          Object.assign(this, { ...this, ...subjectData });
+          this.academy_id = subjectData.academy_id ?? this.academy_id;
+          this.name = subjectData.name ?? this.name;
+          this.color = subjectData.color ?? this.color;
+          this.description = subjectData.description ?? this.description;
         }
       } else {
         // 생성
@@ -202,7 +213,14 @@ export class Subject {
         
         if (insertResult && insertResult.length > 0) {
           console.log('✅ Supabase 삽입 성공! 반환된 데이터:', JSON.stringify(insertResult[0], null, 2));
-          Object.assign(this, new Subject(insertResult[0]));
+          const saved = new Subject(insertResult[0]);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.name = saved.name;
+          this.color = saved.color;
+          this.description = saved.description;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
           // insert().select()가 빈 배열을 반환했지만 에러가 없으면 저장은 성공한 것
           // ID로 다시 조회 시도
@@ -225,7 +243,14 @@ export class Subject {
           
           if (fetchedData) {
             console.log('✅ ID로 조회 성공! 저장 확인됨:', JSON.stringify(fetchedData, null, 2));
-            Object.assign(this, new Subject(fetchedData));
+            const saved = new Subject(fetchedData);
+            this.id = saved.id;
+            this.academy_id = saved.academy_id;
+            this.name = saved.name;
+            this.color = saved.color;
+            this.description = saved.description;
+            this.createdAt = saved.createdAt;
+            this.updatedAt = saved.updatedAt;
           } else {
             console.error('❌ ID로 조회해도 과목을 찾을 수 없습니다. 저장 실패로 간주합니다.');
             throw new Error('Failed to create subject: Insert succeeded but subject not found in database');
@@ -241,7 +266,11 @@ export class Subject {
   }
   
   async update(data) {
-    Object.assign(this, data);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.academy_id !== undefined) this.academy_id = data.academy_id;
+    if (data.name !== undefined) this.name = data.name;
+    if (data.color !== undefined) this.color = data.color;
+    if (data.description !== undefined) this.description = data.description;
     this.updatedAt = new Date();
     return await this.save();
   }

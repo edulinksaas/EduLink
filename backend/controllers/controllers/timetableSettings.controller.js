@@ -25,7 +25,7 @@ export const getTimetableSettings = async (req, res, next) => {
 
 export const saveTimetableSettings = async (req, res, next) => {
   try {
-    const { academy_id, operating_days, time_interval, day_time_settings, timetable_name, classroom_ids } = req.body;
+    const { academy_id, operating_days, time_interval, day_time_settings, timetable_name, classroom_ids, difficulties, class_types, zones } = req.body;
     
     if (!academy_id) {
       return res.status(400).json({ error: 'academy_id is required' });
@@ -38,6 +38,9 @@ export const saveTimetableSettings = async (req, res, next) => {
       day_time_settings: day_time_settings || {},
       timetable_name: timetable_name || null,
       classroom_ids: Array.isArray(classroom_ids) ? classroom_ids : [],
+      difficulties: Array.isArray(difficulties) ? difficulties : [],
+      class_types: Array.isArray(class_types) ? class_types : [],
+      zones: Array.isArray(zones) ? zones : [],
     });
     
     await settings.save();

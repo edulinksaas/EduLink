@@ -2,16 +2,17 @@ import { supabase } from '../config/supabase.js';
 
 // Teacher Model
 export class Teacher {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.name = data.name;
-    this.contact = data.contact;
-    this.subject_id = data.subject_id;
-    this.subject_ids = data.subject_ids || [];
-    this.work_days = data.work_days || '';
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.name = data.name ?? null;
+    this.contact = data.contact ?? null;
+    this.subject_id = data.subject_id ?? null;
+    this.subject_ids = Array.isArray(data.subject_ids) ? data.subject_ids : [];
+    this.work_days = data.work_days ?? '';
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll(academyId) {
@@ -183,14 +184,33 @@ export class Teacher {
           console.error('조회 에러 코드:', fetchError.code);
           console.error('조회 에러 메시지:', fetchError.message);
           console.error('조회 에러 상세:', fetchError.details);
-          // 조회 실패해도 업데이트는 성공했을 수 있으므로 현재 데이터로 업데이트
-          Object.assign(this, { ...this, ...teacherData });
+          // 조회 실패해도 업데이트는 성공했을 수 있으므로 현재 데이터로 업데이트 (화이트리스트 방식)
+          this.academy_id = teacherData.academy_id ?? this.academy_id;
+          this.name = teacherData.name ?? this.name;
+          this.contact = teacherData.contact ?? this.contact;
+          this.subject_id = teacherData.subject_id ?? this.subject_id;
+          this.subject_ids = teacherData.subject_ids ?? this.subject_ids;
+          this.work_days = teacherData.work_days ?? this.work_days;
         } else if (fetchedData && fetchedData.length > 0) {
           console.log('✅ 업데이트 후 조회 성공! 저장된 데이터:', JSON.stringify(fetchedData[0], null, 2));
-          Object.assign(this, new Teacher(fetchedData[0]));
+          const saved = new Teacher(fetchedData[0]);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.name = saved.name;
+          this.contact = saved.contact;
+          this.subject_id = saved.subject_id;
+          this.subject_ids = saved.subject_ids;
+          this.work_days = saved.work_days;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
           console.warn('⚠️ 업데이트 후 조회 결과가 비어있습니다. 현재 데이터로 업데이트');
-          Object.assign(this, { ...this, ...teacherData });
+          this.academy_id = teacherData.academy_id ?? this.academy_id;
+          this.name = teacherData.name ?? this.name;
+          this.contact = teacherData.contact ?? this.contact;
+          this.subject_id = teacherData.subject_id ?? this.subject_id;
+          this.subject_ids = teacherData.subject_ids ?? this.subject_ids;
+          this.work_days = teacherData.work_days ?? this.work_days;
         }
       } else {
         // 생성 (ID 없이 생성, Supabase가 자동 생성)
@@ -246,18 +266,36 @@ export class Teacher {
           console.error('조회 에러 상세:', fetchError.details);
           console.error('조회 에러 힌트:', fetchError.hint);
           
-          // 조회 실패해도 insert는 성공했을 수 있으므로, 생성된 데이터로 객체 업데이트
+          // 조회 실패해도 insert는 성공했을 수 있으므로, 생성된 데이터로 객체 업데이트 (화이트리스트 방식)
           console.log('생성된 데이터로 객체 업데이트 (조회 실패했지만 insert는 성공)');
-          // ID는 나중에 조회할 때 설정됨
-          Object.assign(this, new Teacher({ ...insertData }));
+          this.academy_id = insertData.academy_id ?? this.academy_id;
+          this.name = insertData.name ?? this.name;
+          this.contact = insertData.contact ?? this.contact;
+          this.subject_id = insertData.subject_id ?? this.subject_id;
+          this.subject_ids = insertData.subject_ids ?? this.subject_ids;
+          this.work_days = insertData.work_days ?? this.work_days;
         } else if (fetchedData && fetchedData.length > 0) {
           console.log('✅ 삽입 후 조회 성공! 저장된 데이터:', JSON.stringify(fetchedData[0], null, 2));
           console.log('✅ 생성된 선생님 ID:', fetchedData[0].id);
-          Object.assign(this, new Teacher(fetchedData[0]));
+          const saved = new Teacher(fetchedData[0]);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.name = saved.name;
+          this.contact = saved.contact;
+          this.subject_id = saved.subject_id;
+          this.subject_ids = saved.subject_ids;
+          this.work_days = saved.work_days;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
           console.warn('⚠️ 삽입 후 조회 결과가 비어있습니다. 생성된 데이터로 객체 업데이트');
           console.warn('⚠️ 이는 RLS 정책 문제일 수 있습니다. Supabase에서 직접 데이터 확인 필요');
-          Object.assign(this, new Teacher({ ...insertData }));
+          this.academy_id = insertData.academy_id ?? this.academy_id;
+          this.name = insertData.name ?? this.name;
+          this.contact = insertData.contact ?? this.contact;
+          this.subject_id = insertData.subject_id ?? this.subject_id;
+          this.subject_ids = insertData.subject_ids ?? this.subject_ids;
+          this.work_days = insertData.work_days ?? this.work_days;
         }
       }
       
@@ -269,7 +307,13 @@ export class Teacher {
   }
   
   async update(data) {
-    Object.assign(this, data);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.academy_id !== undefined) this.academy_id = data.academy_id;
+    if (data.name !== undefined) this.name = data.name;
+    if (data.contact !== undefined) this.contact = data.contact;
+    if (data.subject_id !== undefined) this.subject_id = data.subject_id;
+    if (data.subject_ids !== undefined) this.subject_ids = Array.isArray(data.subject_ids) ? data.subject_ids : [];
+    if (data.work_days !== undefined) this.work_days = data.work_days;
     this.updatedAt = new Date();
     return await this.save();
   }

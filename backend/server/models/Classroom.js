@@ -2,13 +2,14 @@ import { supabase } from '../config/supabase.js';
 import crypto from 'crypto';
 
 export class Classroom {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.name = data.name;
-    this.capacity = data.capacity || 20;
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.name = data.name ?? null;
+    this.capacity = data.capacity ?? 20;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll(academyId) {
@@ -151,9 +152,14 @@ export class Classroom {
         
         if (error) throw error;
         
-        // INSERT 성공 시 메모리상의 데이터로 설정
+        // INSERT 성공 시 메모리상의 데이터로 설정 (화이트리스트 방식)
         this.id = insertData.id;
-        Object.assign(this, new Classroom({ ...insertData }));
+        const temp = new Classroom({ ...insertData });
+        this.academy_id = temp.academy_id;
+        this.name = temp.name;
+        this.capacity = temp.capacity;
+        this.createdAt = temp.createdAt;
+        this.updatedAt = temp.updatedAt;
       }
       
       return this;
@@ -164,7 +170,10 @@ export class Classroom {
   }
   
   async update(data) {
-    Object.assign(this, data);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.academy_id !== undefined) this.academy_id = data.academy_id;
+    if (data.name !== undefined) this.name = data.name;
+    if (data.capacity !== undefined) this.capacity = data.capacity;
     this.updatedAt = new Date();
     return await this.save();
   }

@@ -59,4 +59,36 @@ export const createPayment = async (req, res, next) => {
   }
 };
 
+// GET /api/payments/daily-revenue?academy_id=...&date=...
+export const getDailyRevenue = async (req, res, next) => {
+  try {
+    const { academy_id, date } = req.query;
+
+    if (!academy_id) {
+      return res.status(400).json({ error: 'academy_id is required' });
+    }
+
+    // date가 없으면 오늘 날짜 사용
+    const targetDate = date ? new Date(date) : new Date();
+    
+    // payments 테이블에서 계산
+    const revenueFromPayments = await Payment.getDailyRevenue(academy_id, targetDate);
+    
+    // students 테이블에서도 계산 (학생 등록 시 fee가 저장되는 경우)
+    const revenueFromStudents = await Payment.getDailyRevenueFromStudents(academy_id, targetDate);
+    
+    // 두 값을 합산 (중복 방지를 위해 더 큰 값 사용하거나 합산)
+    const totalRevenue = Math.max(revenueFromPayments, revenueFromStudents);
+
+    res.json({
+      revenue: totalRevenue,
+      revenueFromPayments,
+      revenueFromStudents,
+      date: targetDate.toISOString().split('T')[0]
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

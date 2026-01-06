@@ -3,11 +3,11 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { errorHandler } from './middleware/errorHandler.js';
-import { securityHeaders, corsMiddleware } from './middleware/security.js';
-import { apiLimiter } from './middleware/rateLimiter.js';
+import { errorHandler } from './server/middleware/errorHandler.js';
+import { securityHeaders, corsMiddleware } from './server/middleware/security.js';
+import { apiLimiter } from './server/middleware/rateLimiter.js';
 import { validateEnv } from './utils/envValidator.js';
-import apiRoutes from './routes/index.js';
+import apiRoutes from './server/routes/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,7 +44,7 @@ if (!envCheck.isValid && process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // 보안 미들웨어 (가장 먼저 적용)
 app.use(securityHeaders);
@@ -65,7 +65,7 @@ app.use('/api', apiRoutes);
 
 // Health check
 app.get('/health', async (req, res) => {
-  const { testSupabaseConnection } = await import('./config/supabase.js');
+  const { testSupabaseConnection } = await import('./server/config/supabase.js');
   const supabaseStatus = await testSupabaseConnection();
   
   res.json({ 
@@ -78,7 +78,7 @@ app.get('/health', async (req, res) => {
 
 // Supabase 연결 상태 확인
 app.get('/health/supabase', async (req, res) => {
-  const { testSupabaseConnection } = await import('./config/supabase.js');
+  const { testSupabaseConnection } = await import('./server/config/supabase.js');
   const result = await testSupabaseConnection();
   if (result.success) {
     res.json({ status: 'ok', message: 'Supabase connection is working' });
@@ -127,7 +127,7 @@ const startServer = async () => {
     
     // Supabase 설정 확인 (에러가 발생해도 서버는 계속 실행)
     try {
-      const { supabase, testSupabaseConnection } = await import('./config/supabase.js');
+      const { supabase, testSupabaseConnection } = await import('./server/config/supabase.js');
       
       if (!supabase) {
         console.warn('⚠️  경고: Supabase 클라이언트가 초기화되지 않았습니다.');

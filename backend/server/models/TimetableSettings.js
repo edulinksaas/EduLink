@@ -2,16 +2,23 @@ import { supabase } from '../config/supabase.js';
 
 // TimetableSettings Model
 export class TimetableSettings {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.operating_days = data.operating_days || data.operatingDays || [];
-    this.time_interval = data.time_interval || data.timeInterval || '1시간';
-    this.day_time_settings = data.day_time_settings || data.dayTimeSettings || {};
-    this.timetable_name = data.timetable_name || data.timetableName || '';
-    this.classroom_ids = data.classroom_ids || data.classroomIds || [];
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    // difficulties는 절대 포함하지 않음 (DB에 존재하지 않는 컬럼)
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.operating_days = Array.isArray(data.operating_days) ? data.operating_days : (Array.isArray(data.operatingDays) ? data.operatingDays : []);
+    this.time_interval = data.time_interval ?? data.timeInterval ?? '1시간';
+    this.day_time_settings = data.day_time_settings ?? data.dayTimeSettings ?? {};
+    this.timetable_name = data.timetable_name ?? data.timetableName ?? null;
+    this.classroom_ids = Array.isArray(data.classroom_ids) ? data.classroom_ids : (Array.isArray(data.classroomIds) ? data.classroomIds : []);
+    this.building_names = data.building_names ?? data.buildingNames ?? null;
+    this.building_classrooms = data.building_classrooms ?? data.buildingClassrooms ?? null;
+    // class_types 정규화: class_types > classTypes > difficulties 순서로 우선순위 (difficulties는 읽기용으로만 사용)
+    this.class_types = Array.isArray(data.class_types) ? data.class_types : (Array.isArray(data.classTypes) ? data.classTypes : (Array.isArray(data.difficulties) ? data.difficulties : []));
+    this.zones = data.zones ?? null;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findByAcademyId(academyId) {
@@ -21,11 +28,19 @@ export class TimetableSettings {
     }
     
     try {
+      // academy_id로 정확히 단일 row 가져오기 (최신 1건만)
+      // updated_at desc, created_at desc 순서로 정렬하여 최신 1건만 반환
+      // Supabase는 여러 order() 체이닝을 지원하지 않으므로, updated_at만 사용 (updated_at이 없으면 created_at 사용)
       const { data, error } = await supabase
         .from('timetable_settings')
         .select('*')
         .eq('academy_id', academyId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
+      
+      // 만약 결과가 없고 created_at으로도 정렬이 필요하면 별도 쿼리 실행
+      // 하지만 일반적으로 updated_at이 있으면 충분하므로 일단 이대로 진행
       
       if (error) {
         console.error('시간표 설정 조회 에러:', error);
@@ -43,126 +58,137 @@ export class TimetableSettings {
     }
   }
   
-  async save() {
+  async save(data) {
     if (!supabase) {
       console.warn('Supabase가 연결되지 않았습니다.');
       return this;
     }
-    
-    try {
-      const settingsData = {
-        academy_id: this.academy_id,
-        operating_days: Array.isArray(this.operating_days) ? this.operating_days : [],
-        time_interval: this.time_interval || '1시간',
-        day_time_settings: this.day_time_settings || {},
-        timetable_name: this.timetable_name || null,
-        updated_at: new Date().toISOString(),
-      };
-      
-      // classroom_ids가 있으면 추가 (컬럼이 존재하는 경우에만)
-      if (Array.isArray(this.classroom_ids) && this.classroom_ids.length >= 0) {
-        settingsData.classroom_ids = this.classroom_ids;
-      }
-      
-      // 기존 설정이 있는지 확인
-      const existing = await TimetableSettings.findByAcademyId(this.academy_id);
-      
-      if (existing && existing.id) {
-        // 업데이트 시 classroom_ids 컬럼이 없을 수 있으므로 조건부로 추가
-        const updateData = { ...settingsData };
-        
-        // classroom_ids가 있으면 추가 시도
-        if (Array.isArray(this.classroom_ids)) {
-          updateData.classroom_ids = this.classroom_ids;
-        }
-        
-        const { data: updateResult, error: updateError } = await supabase
-          .from('timetable_settings')
-          .update(updateData)
-          .eq('id', existing.id)
-          .select();
-        
-        if (updateError) {
-          // classroom_ids 컬럼이 없는 경우 에러 처리
-          if (updateError.code === 'PGRST204' && updateError.message?.includes('classroom_ids')) {
-            console.warn('⚠️ classroom_ids 컬럼이 없습니다. 컬럼 없이 저장합니다.');
-            // classroom_ids 없이 다시 시도
-            delete updateData.classroom_ids;
-            const { data: retryResult, error: retryError } = await supabase
-              .from('timetable_settings')
-              .update(updateData)
-              .eq('id', existing.id)
-              .select();
-            
-            if (retryError) {
-              console.error('시간표 설정 업데이트 에러:', retryError);
-              throw new Error(`시간표 설정 업데이트 실패: ${retryError.message}`);
-            }
-            
-            if (retryResult && retryResult.length > 0) {
-              Object.assign(this, new TimetableSettings(retryResult[0]));
-            }
-          } else {
-            console.error('시간표 설정 업데이트 에러:', updateError);
-            throw new Error(`시간표 설정 업데이트 실패: ${updateError.message}`);
-          }
-        } else {
-          if (updateResult && updateResult.length > 0) {
-            Object.assign(this, new TimetableSettings(updateResult[0]));
-          }
-        }
-      } else {
-        // 생성
-        const insertData = {
-          ...settingsData,
-          created_at: new Date().toISOString(),
-        };
-        
-        // classroom_ids가 있으면 추가 시도
-        if (Array.isArray(this.classroom_ids)) {
-          insertData.classroom_ids = this.classroom_ids;
-        }
-        
-        const { data: insertResult, error: insertError } = await supabase
-          .from('timetable_settings')
-          .insert(insertData)
-          .select();
-        
-        if (insertError) {
-          // classroom_ids 컬럼이 없는 경우 에러 처리
-          if (insertError.code === 'PGRST204' && insertError.message?.includes('classroom_ids')) {
-            console.warn('⚠️ classroom_ids 컬럼이 없습니다. 컬럼 없이 저장합니다.');
-            // classroom_ids 없이 다시 시도
-            delete insertData.classroom_ids;
-            const { data: retryResult, error: retryError } = await supabase
-              .from('timetable_settings')
-              .insert(insertData)
-              .select();
-            
-            if (retryError) {
-              console.error('시간표 설정 생성 에러:', retryError);
-              throw new Error(`시간표 설정 생성 실패: ${retryError.message}`);
-            }
-            
-            if (retryResult && retryResult.length > 0) {
-              Object.assign(this, new TimetableSettings(retryResult[0]));
-            }
-          } else {
-            console.error('시간표 설정 생성 에러:', insertError);
-            throw new Error(`시간표 설정 생성 실패: ${insertError.message}`);
-          }
-        } else {
-          if (insertResult && insertResult.length > 0) {
-            Object.assign(this, new TimetableSettings(insertResult[0]));
-          }
-        }
-      }
-      
-      return this;
-    } catch (error) {
-      console.error('시간표 설정 저장 실패:', error);
-      throw error;
+
+    const academy_id = data.academy_id;
+    if (!academy_id) {
+      throw new Error('academy_id is required');
     }
+
+    // 🔍 PARTIAL UPDATE: 기존 row를 먼저 조회
+    const existing = await TimetableSettings.findByAcademyId(academy_id);
+    
+    // 기존 데이터와 incoming 데이터를 merge (incoming에 명시적으로 들어온 키만 덮어쓰기)
+    const mergedData = existing ? {
+      // 기존 데이터 유지
+      academy_id: existing.academy_id,
+      operating_days: existing.operating_days || [],
+      day_time_settings: existing.day_time_settings || {},
+      time_interval: existing.time_interval || '1시간',
+      timetable_name: existing.timetable_name || null,
+      classroom_ids: existing.classroom_ids || [],
+      building_names: existing.building_names || null,
+      building_classrooms: existing.building_classrooms || null,
+      class_types: existing.class_types || [],
+      zones: existing.zones || null,
+    } : {
+      // 새로 생성하는 경우 기본값
+      academy_id,
+      operating_days: [],
+      day_time_settings: {},
+      time_interval: '1시간',
+      timetable_name: null,
+      classroom_ids: [],
+      building_names: null,
+      building_classrooms: null,
+      class_types: [],
+      zones: null,
+    };
+
+    // incoming data에서 명시적으로 들어온 키만 덮어쓰기 (undefined는 제외)
+    if (data.operating_days !== undefined) {
+      mergedData.operating_days = Array.isArray(data.operating_days) ? data.operating_days : [];
+    }
+    if (data.day_time_settings !== undefined) {
+      mergedData.day_time_settings = data.day_time_settings || {};
+    }
+    if (data.time_interval !== undefined) {
+      mergedData.time_interval = data.time_interval || '1시간';
+    }
+    if (data.timetable_name !== undefined) {
+      mergedData.timetable_name = data.timetable_name || null;
+    }
+    if (data.classroom_ids !== undefined) {
+      mergedData.classroom_ids = Array.isArray(data.classroom_ids) ? data.classroom_ids : [];
+    }
+    if (data.building_names !== undefined) {
+      mergedData.building_names = data.building_names || null;
+    }
+    if (data.building_classrooms !== undefined) {
+      mergedData.building_classrooms = data.building_classrooms || null;
+    }
+    
+    // class_types 정규화: 어떤 경로로 들어오든 class_types 하나로 통일
+    if (data.class_types !== undefined || data.classTypes !== undefined || data.difficulties !== undefined) {
+      const class_types = data.class_types ?? data.classTypes ?? data.difficulties ?? [];
+      mergedData.class_types = Array.isArray(class_types) ? class_types : (class_types ? [class_types] : []);
+    }
+
+    // zones 추출 (JSON 문자열로 저장)
+    if (data.zones !== undefined) {
+      const zones = data.zones;
+      mergedData.zones = zones ? (typeof zones === 'string' ? zones : JSON.stringify(zones)) : null;
+    }
+
+    // 화이트리스트로 DB payload 구성
+    const dbPayload = {
+      academy_id: mergedData.academy_id,
+      operating_days: mergedData.operating_days,
+      day_time_settings: mergedData.day_time_settings,
+      time_interval: mergedData.time_interval,
+      timetable_name: mergedData.timetable_name,
+      classroom_ids: mergedData.classroom_ids,
+      building_names: mergedData.building_names,
+      building_classrooms: mergedData.building_classrooms,
+      class_types: mergedData.class_types,
+      zones: mergedData.zones,
+    };
+
+    // DB 호출 직전 로그: payload keys 확인
+    const finalPayloadKeys = Object.keys(dbPayload);
+    console.log('[TimetableSettings.save] PARTIAL UPDATE - payload keys:', finalPayloadKeys);
+    console.log('[TimetableSettings.save] day_time_settings preserved:', !!mergedData.day_time_settings && Object.keys(mergedData.day_time_settings).length > 0);
+    
+    // difficulties가 포함되어 있는지 확인
+    if (finalPayloadKeys.includes('difficulties')) {
+      console.error('❌ ERROR: difficulties가 DB payload에 포함되어 있습니다!');
+      throw new Error('difficulties는 DB에 저장할 수 없습니다. class_types만 사용하세요.');
+    }
+
+    // upsert 사용 (academy_id 기준으로 update or insert)
+    const { data: result, error } = await supabase
+      .from('timetable_settings')
+      .upsert(dbPayload, { onConflict: 'academy_id' })
+      .select();
+
+    if (error) {
+      console.error('시간표 설정 저장 에러:', error);
+      throw new Error(`시간표 설정 저장 실패: ${error.message}`);
+    }
+
+    // 응답 데이터로 this 업데이트 (화이트리스트 방식)
+    if (result && result.length > 0) {
+      const saved = result[0];
+      this.id = saved.id;
+      this.academy_id = saved.academy_id;
+      this.operating_days = saved.operating_days || [];
+      this.time_interval = saved.time_interval || '1시간';
+      this.day_time_settings = saved.day_time_settings || {};
+      this.timetable_name = saved.timetable_name || null;
+      this.classroom_ids = saved.classroom_ids || [];
+      this.building_names = saved.building_names || null;
+      this.building_classrooms = saved.building_classrooms || null;
+      this.class_types = saved.class_types || [];
+      this.zones = saved.zones || null;
+      this.createdAt = saved.created_at || new Date();
+      this.updatedAt = saved.updated_at || new Date();
+    }
+
+    return this;
   }
 }
 

@@ -2,17 +2,33 @@ import { supabase } from '../config/supabase.js';
 
 // Attendance Record Model
 export class AttendanceRecord {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.student_id = data.student_id;
-    this.class_id = data.class_id;
-    this.enrollment_id = data.enrollment_id || null;
-    this.date = data.date; // YYYY-MM-DD
-    this.status = data.status; // 'present' | 'absent' | 'late' | 'sick' | 'carryover'
-    this.note = data.note || '';
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  // 화이트리스트: 테이블 실제 컬럼만 정의
+  static columns = ['id', 'academy_id', 'student_id', 'class_id', 'enrollment_id', 'date', 'status', 'note', 'created_at', 'updated_at'];
+  static writableColumns = ['academy_id', 'student_id', 'class_id', 'enrollment_id', 'date', 'status', 'note', 'updated_at'];
+
+  // payload 정규화 헬퍼
+  static pick(obj, keys) {
+    const out = {};
+    for (const k of keys) {
+      if (obj?.[k] !== undefined) {
+        out[k] = obj[k];
+      }
+    }
+    return out;
+  }
+
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.student_id = data.student_id ?? null;
+    this.class_id = data.class_id ?? null;
+    this.enrollment_id = data.enrollment_id ?? null;
+    this.date = data.date ?? null;
+    this.status = data.status ?? null;
+    this.note = data.note ?? '';
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
 
   static async findByStudent(studentId, fromDate = null, toDate = null) {
@@ -52,36 +68,50 @@ export class AttendanceRecord {
     }
 
     try {
-      const recordData = {
+      // 화이트리스트 방식으로 payload 생성
+      const inputData = {
         academy_id: this.academy_id,
         student_id: this.student_id,
         class_id: this.class_id || null,
+        enrollment_id: this.enrollment_id || null,
         date: this.date,
         status: this.status,
         note: this.note || '',
         updated_at: new Date().toISOString(),
       };
 
-      // enrollment_id가 있고 유효한 경우에만 추가
-      // (DB에 컬럼이 없을 수도 있으므로 안전하게 처리)
-      if (this.enrollment_id) {
-        recordData.enrollment_id = this.enrollment_id;
+      // 개발용 가드: writableColumns에 없는 키 확인
+      const extra = Object.keys(inputData).filter(k => !AttendanceRecord.writableColumns.includes(k));
+      if (extra.length) {
+        console.warn('[AttendanceRecord GUARD] extra keys ignored:', extra);
       }
+
+      // 화이트리스트 payload 생성
+      const dbPayload = AttendanceRecord.pick(inputData, AttendanceRecord.writableColumns);
 
       if (this.id) {
         const { data, error } = await supabase
           .from('attendance_records')
-          .update(recordData)
+          .update(dbPayload)
           .eq('id', this.id)
           .select()
           .single();
 
         if (error) throw error;
-        Object.assign(this, new AttendanceRecord(data));
+        
+        // DB 결과를 화이트리스트 방식으로 반영
+        if (data) {
+          const saved = new AttendanceRecord(data);
+          for (const k of AttendanceRecord.columns) {
+            this[k] = saved[k];
+          }
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
+        }
       } else {
         // enrollment_id 컬럼이 없을 수 있으므로, 먼저 enrollment_id 없이 시도
         let insertData = {
-          ...recordData,
+          ...dbPayload,
           created_at: new Date().toISOString(),
         };
 
@@ -94,7 +124,6 @@ export class AttendanceRecord {
         // enrollment_id 컬럼이 없는 경우 에러 발생 시, enrollment_id 없이 재시도
         if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('enrollment_id'))) {
           console.warn('⚠️ enrollment_id 컬럼이 없거나 에러 발생, enrollment_id 없이 재시도:', error.message);
-          // enrollment_id 제거하고 재시도
           const { enrollment_id, ...dataWithoutEnrollment } = insertData;
           const retryData = dataWithoutEnrollment;
           
@@ -117,7 +146,16 @@ export class AttendanceRecord {
         }
 
         if (error) throw error;
-        Object.assign(this, new AttendanceRecord(data));
+        
+        // DB 결과를 화이트리스트 방식으로 반영
+        if (data) {
+          const saved = new AttendanceRecord(data);
+          for (const k of AttendanceRecord.columns) {
+            this[k] = saved[k];
+          }
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
+        }
       }
 
       return this;
@@ -142,7 +180,6 @@ export class AttendanceRecord {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          // No rows returned
           return null;
         }
         throw error;
@@ -178,5 +215,3 @@ export class AttendanceRecord {
     }
   }
 }
-
-

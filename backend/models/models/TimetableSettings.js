@@ -10,6 +10,14 @@ export class TimetableSettings {
     this.day_time_settings = data.day_time_settings || data.dayTimeSettings || {};
     this.timetable_name = data.timetable_name || data.timetableName || '';
     this.classroom_ids = data.classroom_ids || data.classroomIds || [];
+    this.difficulties = data.difficulties || [];
+    this.class_types = data.class_types || data.classTypes || [];
+    // zones 정보 (JSON 형식으로 저장)
+    if (data.zones) {
+      this.zones = typeof data.zones === 'string' ? JSON.parse(data.zones) : data.zones;
+    } else {
+      this.zones = [];
+    }
     this.createdAt = data.created_at || data.createdAt || new Date();
     this.updatedAt = data.updated_at || data.updatedAt || new Date();
   }
@@ -62,6 +70,19 @@ export class TimetableSettings {
       // classroom_ids가 있으면 추가 (컬럼이 존재하는 경우에만)
       if (Array.isArray(this.classroom_ids) && this.classroom_ids.length >= 0) {
         settingsData.classroom_ids = this.classroom_ids;
+      }
+      
+      // difficulties와 class_types 추가 (컬럼이 존재하는 경우에만)
+      if (Array.isArray(this.difficulties)) {
+        settingsData.difficulties = this.difficulties;
+      }
+      if (Array.isArray(this.class_types)) {
+        settingsData.class_types = this.class_types;
+      }
+      
+      // zones 추가 (JSON 형식으로 저장)
+      if (Array.isArray(this.zones) && this.zones.length > 0) {
+        settingsData.zones = JSON.stringify(this.zones);
       }
       
       // 기존 설정이 있는지 확인

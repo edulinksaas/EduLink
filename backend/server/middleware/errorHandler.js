@@ -39,15 +39,20 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
   
-  res.status(statusCode).json({
+  const errorResponse = {
     error: {
       message
-      // 개발 환경에서만 스택 트레이스 제공
-      ...(NODE_ENV === 'development' && { 
-        stack: err.stack,
-        details: err.details 
-      })
     }
-  });
+  };
+  
+  // 개발 환경에서만 스택 트레이스 제공
+  if (NODE_ENV === 'development') {
+    errorResponse.error.stack = err.stack;
+    if (err.details) {
+      errorResponse.error.details = err.details;
+    }
+  }
+  
+  res.status(statusCode).json(errorResponse);
 };
 

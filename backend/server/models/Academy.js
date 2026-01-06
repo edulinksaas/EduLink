@@ -2,15 +2,16 @@ import { supabase } from '../config/supabase.js';
 
 // Academy Model
 export class Academy {
-  constructor(data) {
-    this.id = data.id;
-    this.name = data.name;
-    this.logo_url = data.logo_url;
-    this.address = data.address;
-    this.floor = data.floor;
-    this.code = data.code;
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.name = data.name ?? null;
+    this.logo_url = data.logo_url ?? null;
+    this.address = data.address ?? null;
+    this.floor = data.floor ?? null;
+    this.code = data.code ?? null;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll() {
@@ -219,13 +220,29 @@ export class Academy {
         
         if (fetchError) {
           console.warn('업데이트 후 조회 실패:', fetchError);
-          // 조회 실패해도 업데이트는 성공했으므로 현재 데이터로 업데이트
-          Object.assign(this, { ...this, ...academyData });
+          // 조회 실패해도 업데이트는 성공했으므로 현재 데이터로 업데이트 (화이트리스트 방식)
+          this.name = academyData.name ?? this.name;
+          this.logo_url = academyData.logo_url ?? this.logo_url;
+          this.address = academyData.address ?? this.address;
+          this.floor = academyData.floor ?? this.floor;
+          this.code = academyData.code ?? this.code;
         } else if (fetchedData) {
-          Object.assign(this, new Academy(fetchedData));
+          const saved = new Academy(fetchedData);
+          this.id = saved.id;
+          this.name = saved.name;
+          this.logo_url = saved.logo_url;
+          this.address = saved.address;
+          this.floor = saved.floor;
+          this.code = saved.code;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
           // 데이터가 없으면 현재 데이터로 업데이트
-          Object.assign(this, { ...this, ...academyData });
+          this.name = academyData.name ?? this.name;
+          this.logo_url = academyData.logo_url ?? this.logo_url;
+          this.address = academyData.address ?? this.address;
+          this.floor = academyData.floor ?? this.floor;
+          this.code = academyData.code ?? this.code;
         }
       } else {
         // 생성
@@ -255,15 +272,31 @@ export class Academy {
         if (insertResult && insertResult.length > 0) {
           // insert().select()가 성공하면 데이터는 저장된 것입니다
           console.log('✅ Supabase 삽입 성공! 반환된 데이터:', JSON.stringify(insertResult[0], null, 2));
-          Object.assign(this, new Academy(insertResult[0]));
+          const saved = new Academy(insertResult[0]);
+          this.id = saved.id;
+          this.name = saved.name;
+          this.logo_url = saved.logo_url;
+          this.address = saved.address;
+          this.floor = saved.floor;
+          this.code = saved.code;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
           // RLS 정책으로 인해 select()가 빈 배열을 반환할 수 있지만, insert는 성공했을 수 있습니다
           // insertError가 없었다면 insert는 성공한 것입니다
           console.warn('⚠️ insert().select()가 빈 배열을 반환했습니다. RLS 정책 문제일 수 있습니다.');
           console.log('✅ Supabase insert는 성공했습니다 (에러가 없으므로). ID:', this.id);
           console.log('⚠️ RLS 정책을 비활성화하려면 DISABLE_RLS_ALL_TABLES.sql을 실행하세요.');
-          // insertData로 객체 업데이트 (insert는 성공했으므로)
-          Object.assign(this, new Academy({ ...insertData, id: this.id }));
+          // insertData로 객체 업데이트 (insert는 성공했으므로) (화이트리스트 방식)
+          const temp = new Academy({ ...insertData, id: this.id });
+          this.id = temp.id;
+          this.name = temp.name;
+          this.logo_url = temp.logo_url;
+          this.address = temp.address;
+          this.floor = temp.floor;
+          this.code = temp.code;
+          this.createdAt = temp.createdAt;
+          this.updatedAt = temp.updatedAt;
         }
       }
       
@@ -285,17 +318,22 @@ export class Academy {
   }
   
   async update(data) {
-    // 빈 문자열을 null로 변환
-    const cleanedData = {};
-    Object.keys(data).forEach(key => {
-      if (key === 'name') {
-        cleanedData[key] = data[key] && data[key].trim() ? data[key].trim() : this.name;
-      } else {
-        cleanedData[key] = (data[key] && data[key].toString().trim()) ? data[key] : null;
-      }
-    });
-    
-    Object.assign(this, cleanedData);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.name !== undefined) {
+      this.name = data.name && data.name.trim() ? data.name.trim() : this.name;
+    }
+    if (data.logo_url !== undefined) {
+      this.logo_url = (data.logo_url && data.logo_url.toString().trim()) ? data.logo_url : null;
+    }
+    if (data.address !== undefined) {
+      this.address = (data.address && data.address.toString().trim()) ? data.address : null;
+    }
+    if (data.floor !== undefined) {
+      this.floor = (data.floor && data.floor.toString().trim()) ? data.floor : null;
+    }
+    if (data.code !== undefined) {
+      this.code = (data.code && data.code.toString().trim()) ? data.code : null;
+    }
     this.updatedAt = new Date();
     return await this.save();
   }

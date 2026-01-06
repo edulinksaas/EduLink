@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { Academy } from '../models/Academy.js';
+import { Academy } from '../models/models/Academy.js';
 
 export const getAcademies = async (req, res, next) => {
   try {

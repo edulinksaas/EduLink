@@ -2,18 +2,19 @@ import { supabase } from '../config/supabase.js';
 
 // Student Model
 export class Student {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.name = data.name;
-    this.parent_contact = data.parent_contact;
-    this.class_id = data.class_id;
-    this.teacher_id = data.teacher_id;
-    this.fee = data.fee;
-    this.has_receipt = data.has_receipt;
-    this.note = data.note;
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.name = data.name ?? null;
+    this.parent_contact = data.parent_contact ?? null;
+    this.class_id = data.class_id ?? null;
+    this.teacher_id = data.teacher_id ?? null;
+    this.fee = data.fee ?? null;
+    this.has_receipt = data.has_receipt ?? false;
+    this.note = data.note ?? null;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll(academyId) {
@@ -185,11 +186,37 @@ export class Student {
         
         if (fetchError) {
           console.warn('업데이트 후 조회 실패:', fetchError);
-          Object.assign(this, { ...this, ...studentData });
+          // 화이트리스트 방식으로 업데이트
+          this.academy_id = studentData.academy_id ?? this.academy_id;
+          this.name = studentData.name ?? this.name;
+          this.parent_contact = studentData.parent_contact ?? this.parent_contact;
+          this.class_id = studentData.class_id ?? this.class_id;
+          this.teacher_id = studentData.teacher_id ?? this.teacher_id;
+          this.fee = studentData.fee ?? this.fee;
+          this.has_receipt = studentData.has_receipt ?? this.has_receipt;
+          this.note = studentData.note ?? this.note;
         } else if (fetchedData) {
-          Object.assign(this, new Student(fetchedData));
+          const saved = new Student(fetchedData);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.name = saved.name;
+          this.parent_contact = saved.parent_contact;
+          this.class_id = saved.class_id;
+          this.teacher_id = saved.teacher_id;
+          this.fee = saved.fee;
+          this.has_receipt = saved.has_receipt;
+          this.note = saved.note;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         } else {
-          Object.assign(this, { ...this, ...studentData });
+          this.academy_id = studentData.academy_id ?? this.academy_id;
+          this.name = studentData.name ?? this.name;
+          this.parent_contact = studentData.parent_contact ?? this.parent_contact;
+          this.class_id = studentData.class_id ?? this.class_id;
+          this.teacher_id = studentData.teacher_id ?? this.teacher_id;
+          this.fee = studentData.fee ?? this.fee;
+          this.has_receipt = studentData.has_receipt ?? this.has_receipt;
+          this.note = studentData.note ?? this.note;
         }
       } else {
         // 생성
@@ -219,12 +246,45 @@ export class Student {
           
           if (fetchError || !fetchedData) {
             console.error('id로 조회 실패:', fetchError);
-            Object.assign(this, new Student({ ...insertData, id: this.id }));
+            const temp = new Student({ ...insertData, id: this.id });
+            this.id = temp.id;
+            this.academy_id = temp.academy_id;
+            this.name = temp.name;
+            this.parent_contact = temp.parent_contact;
+            this.class_id = temp.class_id;
+            this.teacher_id = temp.teacher_id;
+            this.fee = temp.fee;
+            this.has_receipt = temp.has_receipt;
+            this.note = temp.note;
+            this.createdAt = temp.createdAt;
+            this.updatedAt = temp.updatedAt;
           } else {
-            Object.assign(this, new Student(fetchedData));
+            const saved = new Student(fetchedData);
+            this.id = saved.id;
+            this.academy_id = saved.academy_id;
+            this.name = saved.name;
+            this.parent_contact = saved.parent_contact;
+            this.class_id = saved.class_id;
+            this.teacher_id = saved.teacher_id;
+            this.fee = saved.fee;
+            this.has_receipt = saved.has_receipt;
+            this.note = saved.note;
+            this.createdAt = saved.createdAt;
+            this.updatedAt = saved.updatedAt;
           }
         } else {
-          Object.assign(this, new Student(insertResult[0]));
+          const saved = new Student(insertResult[0]);
+          this.id = saved.id;
+          this.academy_id = saved.academy_id;
+          this.name = saved.name;
+          this.parent_contact = saved.parent_contact;
+          this.class_id = saved.class_id;
+          this.teacher_id = saved.teacher_id;
+          this.fee = saved.fee;
+          this.has_receipt = saved.has_receipt;
+          this.note = saved.note;
+          this.createdAt = saved.createdAt;
+          this.updatedAt = saved.updatedAt;
         }
       }
       
@@ -236,7 +296,15 @@ export class Student {
   }
   
   async update(data) {
-    Object.assign(this, data);
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    if (data.academy_id !== undefined) this.academy_id = data.academy_id;
+    if (data.name !== undefined) this.name = data.name;
+    if (data.parent_contact !== undefined) this.parent_contact = data.parent_contact;
+    if (data.class_id !== undefined) this.class_id = data.class_id;
+    if (data.teacher_id !== undefined) this.teacher_id = data.teacher_id;
+    if (data.fee !== undefined) this.fee = data.fee;
+    if (data.has_receipt !== undefined) this.has_receipt = data.has_receipt;
+    if (data.note !== undefined) this.note = data.note;
     this.updatedAt = new Date();
     return await this.save();
   }

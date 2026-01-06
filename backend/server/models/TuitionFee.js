@@ -37,15 +37,31 @@ const getAdminSupabase = () => {
 
 // TuitionFee Model
 export class TuitionFee {
-  constructor(data) {
-    this.id = data.id;
-    this.academy_id = data.academy_id;
-    this.amount = data.amount;
-    this.value = data.value;
-    this.class_type = data.class_type || null;
-    this.payment_method = data.payment_method || null;
-    this.createdAt = data.created_at || data.createdAt || new Date();
-    this.updatedAt = data.updated_at || data.updatedAt || new Date();
+  // 화이트리스트: 테이블 실제 컬럼만 정의
+  static columns = ['id', 'academy_id', 'amount', 'value', 'class_type', 'payment_method', 'created_at', 'updated_at'];
+  static writableColumns = ['academy_id', 'amount', 'value', 'class_type', 'payment_method', 'updated_at'];
+
+  // payload 정규화 헬퍼
+  static pick(obj, keys) {
+    const out = {};
+    for (const k of keys) {
+      if (obj?.[k] !== undefined) {
+        out[k] = obj[k];
+      }
+    }
+    return out;
+  }
+
+  constructor(data = {}) {
+    // 화이트리스트 방식: 허용된 컬럼만 명시적으로 할당
+    this.id = data.id ?? null;
+    this.academy_id = data.academy_id ?? null;
+    this.amount = data.amount ?? null;
+    this.value = data.value ?? null;
+    this.class_type = data.class_type ?? null;
+    this.payment_method = data.payment_method ?? null;
+    this.createdAt = data.created_at ?? data.createdAt ?? new Date();
+    this.updatedAt = data.updated_at ?? data.updatedAt ?? new Date();
   }
   
   static async findAll(academyId) {
@@ -145,7 +161,8 @@ export class TuitionFee {
     }
     
     try {
-      const feeData = {
+      // 화이트리스트 방식으로 payload 생성
+      const inputData = {
         academy_id: this.academy_id,
         amount: this.amount,
         value: this.value,
@@ -153,6 +170,15 @@ export class TuitionFee {
         payment_method: this.payment_method || null,
         updated_at: new Date().toISOString(),
       };
+
+      // 개발용 가드
+      const extra = Object.keys(inputData).filter(k => !TuitionFee.writableColumns.includes(k));
+      if (extra.length) {
+        console.warn('[TuitionFee GUARD] extra keys ignored:', extra);
+      }
+
+      // 화이트리스트 payload 생성
+      const dbPayload = TuitionFee.pick(inputData, TuitionFee.writableColumns);
       
       let shouldInsert = true;
       
@@ -166,7 +192,7 @@ export class TuitionFee {
           console.log('📝 수강료 UPDATE 시도 - ID:', this.id);
           const { data: updateResult, error: updateError } = await adminSupabase
             .from('tuition_fees')
-            .update(feeData)
+            .update(dbPayload)
             .eq('id', this.id)
             .select();
           
@@ -177,7 +203,13 @@ export class TuitionFee {
           
           if (updateResult && updateResult.length > 0) {
             console.log('✅ UPDATE 성공:', updateResult[0]);
-            Object.assign(this, new TuitionFee(updateResult[0]));
+            // DB 결과를 화이트리스트 방식으로 반영
+            const saved = new TuitionFee(updateResult[0]);
+            for (const k of TuitionFee.columns) {
+              this[k] = saved[k];
+            }
+            this.createdAt = saved.createdAt;
+            this.updatedAt = saved.updatedAt;
             return this;
           }
         } else {
@@ -191,7 +223,7 @@ export class TuitionFee {
       if (shouldInsert) {
         // 생성
         const insertData = {
-          ...feeData,
+          ...dbPayload,
           created_at: new Date().toISOString(),
         };
         
@@ -233,7 +265,12 @@ export class TuitionFee {
             const verifyFee = await TuitionFee.findById(this.id);
             if (verifyFee) {
               console.log('✅ 조회 성공 - 실제로는 저장되었습니다:', verifyFee.id);
-              Object.assign(this, verifyFee);
+              // 화이트리스트 방식으로 반영
+              for (const k of TuitionFee.columns) {
+                this[k] = verifyFee[k];
+              }
+              this.createdAt = verifyFee.createdAt;
+              this.updatedAt = verifyFee.updatedAt;
               return this;
             }
           }
@@ -243,7 +280,13 @@ export class TuitionFee {
         
         // insertResult가 있으면 성공
         console.log('✅ INSERT 성공 - insertResult:', insertResult[0]);
-        Object.assign(this, new TuitionFee(insertResult[0]));
+        // DB 결과를 화이트리스트 방식으로 반영
+        const saved = new TuitionFee(insertResult[0]);
+        for (const k of TuitionFee.columns) {
+          this[k] = saved[k];
+        }
+        this.createdAt = saved.createdAt;
+        this.updatedAt = saved.updatedAt;
         console.log('✅ 저장된 수강료 ID:', this.id);
         
         // 즉시 조회하여 저장 확인

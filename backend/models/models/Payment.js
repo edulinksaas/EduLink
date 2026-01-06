@@ -37,6 +37,74 @@ export class Payment {
     }
   }
 
+  // 일별 매출 계산 (특정 날짜의 payments 합계)
+  static async getDailyRevenue(academyId, date) {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return 0;
+    }
+
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const { data, error } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('academy_id', academyId)
+        .gte('created_at', startOfDay.toISOString())
+        .lte('created_at', endOfDay.toISOString());
+
+      if (error) throw error;
+      
+      const total = (data || []).reduce((sum, payment) => {
+        const amount = typeof payment.amount === 'number' ? payment.amount : parseInt(payment.amount, 10) || 0;
+        return sum + amount;
+      }, 0);
+
+      return total;
+    } catch (error) {
+      console.error('일별 매출 조회 실패:', error);
+      return 0;
+    }
+  }
+
+  // 오늘 등록된 학생들의 fee 합계 계산 (students 테이블 기준)
+  static async getDailyRevenueFromStudents(academyId, date) {
+    if (!supabase) {
+      console.warn('Supabase가 연결되지 않았습니다.');
+      return 0;
+    }
+
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const { data, error } = await supabase
+        .from('students')
+        .select('fee')
+        .eq('academy_id', academyId)
+        .gte('created_at', startOfDay.toISOString())
+        .lte('created_at', endOfDay.toISOString());
+
+      if (error) throw error;
+      
+      const total = (data || []).reduce((sum, student) => {
+        const fee = typeof student.fee === 'number' ? student.fee : (student.fee ? parseInt(student.fee, 10) : 0);
+        return sum + (isNaN(fee) ? 0 : fee);
+      }, 0);
+
+      return total;
+    } catch (error) {
+      console.error('학생 기준 일별 매출 조회 실패:', error);
+      return 0;
+    }
+  }
+
   async save() {
     if (!supabase) {
       console.warn('Supabase가 연결되지 않았습니다.');
